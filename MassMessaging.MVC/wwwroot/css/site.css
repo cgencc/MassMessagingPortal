@@ -20,3 +20,65 @@ html {
 body {
   margin-bottom: 60px;
 }
+/* Genel Arka Plan ve Modern Kartlar */
+body {
+    background-color: #f0f2f5;
+}
+
+.modern-card {
+    border: none;
+    border-radius: 15px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.08);
+}
+
+/* Sohbet Ekraný (WhatsApp Stili) */
+.chat-container {
+    height: 450px;
+    overflow-y: auto;
+    background-color: #e5ddd5; /* WhatsApp arka plan rengi */
+    padding: 20px;
+    background-image: url('https://www.transparenttextures.com/patterns/cubes.png'); /* Hafif bir desen */
+}
+
+/* Ortak Mesaj Balonu Stili */
+.message-bubble {
+    max-width: 75%;
+    padding: 10px 15px;
+    border-radius: 15px;
+    margin-bottom: 12px;
+    clear: both;
+    word-wrap: break-word;
+    position: relative;
+    box-shadow: 0 1px 1px rgba(0,0,0,0.1);
+}
+
+/* Benim Attýðým Mesajlar (Saðda ve Yeþil) */
+.msg-me {
+    background-color: #dcf8c6;
+    float: right;
+    border-bottom-right-radius: 0;
+}
+
+/* Karþýdan Gelen Mesajlar (Solda ve Beyaz) */
+.msg-other {
+    background-color: #ffffff;
+    float: left;
+    border-bottom-left-radius: 0;
+}
+
+/* Grup Mesajlarýna Özel Bir Çizgi */
+.msg-group {
+    border-left: 4px solid #007bff;
+}
+
+/* Gönderen Ýsmi Stili */
+.msg-sender {
+    font-weight: bold;
+    font-size: 0.8em;
+    margin-bottom: 4px;
+    color: #666;
+}
+
+.msg-clear {
+    clear: both;
+}

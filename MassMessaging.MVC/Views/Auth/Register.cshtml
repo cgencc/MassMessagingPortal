@@ -2,40 +2,49 @@
     ViewData["Title"] = "Kayıt Ol";
 }
 
-<div class="row justify-content-center mt-5">
-    <div class="col-md-5">
-        <div class="card shadow">
-            <div class="card-header bg-success text-white text-center">
-                <h4>Yeni Kullanıcı Kaydı</h4>
-            </div>
-            <div class="card-body">
-                <div id="messageBox" class="alert" style="display:none;"></div>
+<div class="row justify-content-center mt-5 pt-3">
+    <div class="col-md-6 col-lg-5">
+        <div class="card modern-card">
+            <div class="card-body p-5">
+                <div class="text-center mb-4">
+                    <div class="bg-success text-white rounded-circle d-inline-flex justify-content-center align-items-center mb-3" style="width: 60px; height: 60px;">
+                        <span class="fs-3">✨</span>
+                    </div>
+                    <h3 class="fw-bold text-dark">Yeni Hesap Oluştur</h3>
+                    <p class="text-muted small">Sadece birkaç adımda aramıza katılın</p>
+                </div>
+
+                <div id="messageBox" class="alert" style="display:none; font-size: 0.9em;"></div>
 
                 <form id="registerForm">
-                    <div class="row">
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">Ad</label>
-                            <input type="text" id="firstName" class="form-control" required />
+                    <div class="row g-2 mb-3">
+                        <div class="col-md-6">
+                            <div class="form-floating">
+                                <input type="text" id="firstName" class="form-control" placeholder="Ad" required />
+                                <label>Ad</label>
+                            </div>
                         </div>
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">Soyad</label>
-                            <input type="text" id="lastName" class="form-control" required />
+                        <div class="col-md-6">
+                            <div class="form-floating">
+                                <input type="text" id="lastName" class="form-control" placeholder="Soyad" required />
+                                <label>Soyad</label>
+                            </div>
                         </div>
                     </div>
-                    <div class="mb-3">
-                        <label class="form-label">E-posta</label>
-                        <input type="email" id="email" class="form-control" required />
+                    <div class="form-floating mb-3">
+                        <input type="email" id="email" class="form-control" placeholder="E-posta" required />
+                        <label>E-posta Adresi</label>
                     </div>
-                    <div class="mb-3">
-                        <label class="form-label">Şifre</label>
-                        <input type="password" id="password" class="form-control" required minlength="6" />
+                    <div class="form-floating mb-4">
+                        <input type="password" id="password" class="form-control" placeholder="Şifre" required minlength="6" />
+                        <label>Şifre (En az 6 karakter)</label>
                     </div>
-                    <button type="submit" class="btn btn-success w-100">Kayıt Ol</button>
-
-                    <div class="text-center mt-3">
-                        <a href="/Auth/Login" class="text-decoration-none">Zaten hesabın var mı? Giriş Yap</a>
-                    </div>
+                    <button type="submit" class="btn btn-success w-100 py-3 fw-bold rounded-3 shadow-sm">Kayıt Ol</button>
                 </form>
+
+                <div class="text-center mt-4 pt-2 border-top">
+                    <p class="mb-0 text-muted small">Zaten hesabınız var mı? <a href="/Auth/Login" class="text-success fw-bold text-decoration-none">Giriş Yapın</a></p>
+                </div>
             </div>
         </div>
     </div>
@@ -43,28 +52,20 @@
 
 @section Scripts {
     <script>
-        // DİKKAT: KENDİ API PORTUNU BURAYA YAZ (Login sayfasındaki portun aynısı)
-        const REGISTER_API_URL = "https://localhost:7218/api/Auth/register";
+        const REGISTER_API_URL = "https://localhost:7124/api/Auth/register";
 
         document.getElementById("registerForm").addEventListener("submit", async function (e) {
-            e.preventDefault(); // Sayfanın yenilenmesini engelle
-
+            e.preventDefault();
             const firstName = document.getElementById("firstName").value;
             const lastName = document.getElementById("lastName").value;
             const email = document.getElementById("email").value;
             const password = document.getElementById("password").value;
 
             try {
-                // MVC C# kullanmadan doğrudan API'ye kayıt isteği atıyoruz
                 const response = await fetch(REGISTER_API_URL, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        firstName: firstName,
-                        lastName: lastName,
-                        email: email,
-                        password: password
-                    })
+                    body: JSON.stringify({ firstName: firstName, lastName: lastName, email: email, password: password })
                 });
 
                 const messageBox = document.getElementById("messageBox");
@@ -72,20 +73,14 @@
 
                 if (response.ok) {
                     messageBox.className = "alert alert-success";
-                    messageBox.innerText = "Kayıt işlemi başarılı! Giriş sayfasına yönlendiriliyorsunuz...";
-
-                    // 2 saniye sonra Login sayfasına at
-                    setTimeout(() => {
-                        window.location.href = "/Auth/Login";
-                    }, 2000);
+                    messageBox.innerText = "Harika! Kayıt başarılı. Giriş sayfasına yönlendiriliyorsunuz...";
+                    setTimeout(() => { window.location.href = "/Auth/Login"; }, 2000);
                 } else {
-                    const errorData = await response.json();
                     messageBox.className = "alert alert-danger";
-                    messageBox.innerText = "Kayıt başarısız! Lütfen bilgileri kontrol edin.";
-                    console.error(errorData);
+                    messageBox.innerText = "Kayıt başarısız! E-posta kullanılıyor olabilir.";
                 }
             } catch (error) {
-                console.error("API'ye bağlanılamadı:", error);
+                console.error("Hata:", error);
             }
         });
     </script>

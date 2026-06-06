@@ -1,30 +1,52 @@
 ﻿@{
-    ViewData["Title"] = "Canlı Sohbet Merkezi";
+    ViewData["Title"] = "Canlı Mesajlaşma";
 }
 
-<div class="row mt-4">
-    <div class="col-md-8 offset-md-2">
-        <div class="card">
-            <div class="card-header bg-dark text-white d-flex justify-content-between">
-                <h4>Toplu Mesajlaşma (SignalR)</h4>
-                <button onclick="logout()" class="btn btn-sm btn-danger">Çıkış Yap</button>
+<div class="row mt-4 justify-content-center">
+    <div class="col-lg-10">
+        <div class="card modern-card overflow-hidden">
+
+            <div class="card-header bg-white border-bottom p-3 d-flex justify-content-between align-items-center">
+                <div class="d-flex align-items-center">
+                    <div class="bg-primary text-white rounded-circle d-flex justify-content-center align-items-center me-3 shadow-sm" style="width: 45px; height: 45px;">
+                        <span class="fs-5">💬</span>
+                    </div>
+                    <div>
+                        <h5 class="mb-0 fw-bold text-dark">İletişim Portalı</h5>
+                        <small id="connStatus" class="text-warning fw-bold">🟢 Bağlanıyor...</small>
+                    </div>
+                </div>
+                <button onclick="logout()" class="btn btn-outline-danger btn-sm rounded-pill px-3 fw-bold">Çıkış Yap</button>
             </div>
-            <div class="card-body">
-                <div id="chatBox" style="height: 350px; overflow-y: scroll; border: 1px solid #ccc; padding: 15px; margin-bottom: 15px; background-color: #f8f9fa;">
+
+            <div class="card-body p-0">
+                <div id="chatBox" class="chat-container">
+                    <div class="text-center text-muted small my-3 p-2 bg-light rounded-pill mx-auto d-inline-block" style="opacity: 0.8">
+                        Sohbete katıldınız. Mesajlarınız uçtan uca şifrelenmiştir.
+                    </div>
                 </div>
 
-                <div class="row">
-                    <div class="col-md-4 mb-2">
-                        <input type="text" id="receiverId" class="form-control" placeholder="Alıcı ID (Birebir)" />
+                <div class="bg-white p-3 border-top">
+                    <div class="row g-2 mb-2">
+                        <div class="col-md-6">
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text bg-light border-end-0">👤</span>
+                                <input type="text" id="receiverId" class="form-control border-start-0 bg-light" placeholder="Kişiye Özel (ID)" />
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text bg-light border-end-0">👥</span>
+                                <input type="number" id="groupId" class="form-control border-start-0 bg-light" placeholder="Gruba Özel (Grup ID)" />
+                            </div>
+                        </div>
                     </div>
-                    <div class="col-md-4 mb-2">
-                        <input type="number" id="groupId" class="form-control" placeholder="Grup ID (Topluluğa)" />
-                    </div>
-                    <div class="col-md-4 mb-2">
-                        <input type="text" id="messageInput" class="form-control" placeholder="Mesajınızı yazın..." />
+
+                    <div class="input-group input-group-lg shadow-sm rounded-pill overflow-hidden mt-2">
+                        <input type="text" id="messageInput" class="form-control border-0 px-4 bg-light" placeholder="Bir şeyler yazın..." style="font-size: 0.95em;" />
+                        <button onclick="sendMessage()" class="btn btn-primary px-4 fw-bold text-white">Gönder 🚀</button>
                     </div>
                 </div>
-                <button onclick="sendMessage()" class="btn btn-success w-100">Gönder</button>
             </div>
         </div>
     </div>
@@ -33,49 +55,58 @@
 @section Scripts {
     <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.0/signalr.min.js"></script>
     <script>
-        // KENDİ PORTLARINI BURAYA YAZ
-        const API_BASE = "https://localhost:7218/api";
-        const HUB_URL = "https://localhost:7218/chathub";
+        const API_BASE = "https://localhost:7124/api";
+        const HUB_URL = "https://localhost:7124/chathub";
 
-        // MVC C# kullanmadan Tarayıcı hafızasından Token'ı çekiyoruz
         const token = localStorage.getItem("JWToken");
+        if (!token) { window.location.href = "/Auth/Login"; }
 
-        // Eğer token yoksa adam kaçak girmiştir, Login'e postala
-        if (!token) {
-            window.location.href = "/Auth/Login";
-        }
-
-        // 1. SignalR Bağlantısını Kur
         const connection = new signalR.HubConnectionBuilder()
             .withUrl(HUB_URL, { accessTokenFactory: () => token })
             .withAutomaticReconnect()
             .build();
 
-        // 2. Birebir Mesaj Geldiğinde
+        // 1. Karşıdan Gelen Mesaj (Beyaz Balon / Sola Yaslı)
         connection.on("ReceiveMessage", (senderId, senderName, message) => {
             const chatBox = document.getElementById("chatBox");
-            chatBox.innerHTML += `<div class="mb-2 p-2 border rounded bg-white"><strong>${senderName}:</strong> ${message}</div>`;
+            chatBox.innerHTML += `
+                <div class="message-bubble msg-other">
+                    <div class="msg-sender">${senderName}</div>
+                    ${message}
+                </div>
+                <div class="msg-clear"></div>`;
             chatBox.scrollTop = chatBox.scrollHeight;
         });
 
-        // 3. Grup Mesajı Geldiğinde
+        // 2. Gruba Gelen Mesaj (Mavi Çizgili Beyaz Balon / Sola Yaslı)
         connection.on("ReceiveGroupMessage", (groupName, senderName, message) => {
             const chatBox = document.getElementById("chatBox");
-            chatBox.innerHTML += `<div class="mb-2 p-2 border rounded text-primary" style="background-color:#eef"><strong>[Grup: ${groupName}] ${senderName}:</strong> ${message}</div>`;
+            chatBox.innerHTML += `
+                <div class="message-bubble msg-other msg-group">
+                    <div class="msg-sender text-primary">[Grup: ${groupName}] ${senderName}</div>
+                    ${message}
+                </div>
+                <div class="msg-clear"></div>`;
             chatBox.scrollTop = chatBox.scrollHeight;
         });
 
+        // Bağlantı Durumu
         connection.start().then(() => {
-            document.getElementById("chatBox").innerHTML += `<div class="text-success small fw-bold">🟢 Canlı sisteme bağlanıldı!</div>`;
-        }).catch(err => console.error(err));
+            document.getElementById("connStatus").className = "text-success fw-bold small";
+            document.getElementById("connStatus").innerText = "🟢 Çevrimiçi";
+        }).catch(err => {
+            document.getElementById("connStatus").className = "text-danger fw-bold small";
+            document.getElementById("connStatus").innerText = "🔴 Bağlantı Hatası";
+            console.error(err);
+        });
 
-        // 4. API'ye Mesaj Gönderme İsteği At (Sıfır C# kodu)
+        // 3. API'ye Mesaj Gönderme (Bizim Mesajımız - Yeşil Balon / Sağa Yaslı)
         async function sendMessage() {
             const receiverId = document.getElementById("receiverId").value;
             const groupId = document.getElementById("groupId").value;
             const content = document.getElementById("messageInput").value;
 
-            if(!content) return alert("Mesaj boş olamaz!");
+            if(!content) return; // Boş mesaj atmayı engelle
 
             const bodyData = {
                 content: content,
@@ -87,24 +118,38 @@
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
-                    "Authorization": `Bearer ${token}` // Token'ı header'a koyduk
+                    "Authorization": `Bearer ${token}`
                 },
                 body: JSON.stringify(bodyData)
             });
 
             if (response.ok) {
+                // Mesaj iletildiyse yeşil balonu ekrana bas
                 const chatBox = document.getElementById("chatBox");
-                chatBox.innerHTML += `<div class="mb-2 p-2 border rounded text-end" style="background-color:#d4edda"><strong>Sen:</strong> ${content}</div>`;
+                chatBox.innerHTML += `
+                    <div class="message-bubble msg-me shadow-sm">
+                        ${content}
+                        <div class="text-end text-muted mt-1" style="font-size: 0.65em;">✓✓</div>
+                    </div>
+                    <div class="msg-clear"></div>`;
                 chatBox.scrollTop = chatBox.scrollHeight;
-                document.getElementById("messageInput").value = "";
+                document.getElementById("messageInput").value = ""; // Kutuyu temizle
             } else {
-                alert("Mesaj iletilemedi! Yetkiniz olmayabilir.");
+                alert("Mesaj gönderilemedi! ID'yi kontrol edin.");
             }
         }
 
+        // Enter tuşuna basınca gönderme tetiklensin
+        document.getElementById("messageInput").addEventListener("keypress", function(event) {
+            if (event.key === "Enter") {
+                event.preventDefault();
+                sendMessage();
+            }
+        });
+
         function logout() {
-            localStorage.removeItem("JWToken"); // Hafızayı sil
-            window.location.href = "/Auth/Login"; // Çıkış yap
+            localStorage.removeItem("JWToken");
+            window.location.href = "/Auth/Login";
         }
     </script>
 }

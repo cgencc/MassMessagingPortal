@@ -2,26 +2,35 @@
     ViewData["Title"] = "Giriş Yap";
 }
 
-<div class="row justify-content-center mt-5">
-    <div class="col-md-5">
-        <div class="card shadow">
-            <div class="card-header bg-primary text-white text-center">
-                <h4>Mass Messaging Giriş</h4>
-            </div>
-            <div class="card-body">
-                <div id="errorMessage" class="alert alert-danger" style="display:none;"></div>
+<div class="row justify-content-center mt-5 pt-4">
+    <div class="col-md-5 col-lg-4">
+        <div class="card modern-card">
+            <div class="card-body p-5">
+                <div class="text-center mb-4">
+                    <div class="bg-primary text-white rounded-circle d-inline-flex justify-content-center align-items-center mb-3" style="width: 60px; height: 60px;">
+                        <span class="fs-3">🔐</span>
+                    </div>
+                    <h3 class="fw-bold text-dark">Hoş Geldiniz</h3>
+                    <p class="text-muted small">Devam etmek için giriş yapın</p>
+                </div>
+
+                <div id="errorMessage" class="alert alert-danger" style="display:none; font-size: 0.9em;"></div>
 
                 <form id="loginForm">
-                    <div class="mb-3">
-                        <label class="form-label">E-posta</label>
-                        <input type="email" id="email" class="form-control" required />
+                    <div class="form-floating mb-3">
+                        <input type="email" id="email" class="form-control" placeholder="name@example.com" required />
+                        <label for="email">E-posta Adresi</label>
                     </div>
-                    <div class="mb-3">
-                        <label class="form-label">Şifre</label>
-                        <input type="password" id="password" class="form-control" required />
+                    <div class="form-floating mb-4">
+                        <input type="password" id="password" class="form-control" placeholder="Şifre" required />
+                        <label for="password">Şifre</label>
                     </div>
-                    <button type="submit" class="btn btn-primary w-100">Giriş Yap</button>
+                    <button type="submit" class="btn btn-primary w-100 py-3 fw-bold rounded-3 shadow-sm">Giriş Yap</button>
                 </form>
+
+                <div class="text-center mt-4 pt-2 border-top">
+                    <p class="mb-0 text-muted small">Hesabınız yok mu? <a href="/Auth/Register" class="text-primary fw-bold text-decoration-none">Hemen Kayıt Olun</a></p>
+                </div>
             </div>
         </div>
     </div>
@@ -29,17 +38,14 @@
 
 @section Scripts {
     <script>
-        // KENDİ API PORTUNU BURAYA YAZMAYI UNUTMA!
-        const API_URL = "https://localhost:7218/api/Auth/login";
+        const API_URL = "https://localhost:7124/api/Auth/login";
 
         document.getElementById("loginForm").addEventListener("submit", async function (e) {
-            e.preventDefault(); // Sayfanın yenilenmesini engelle (Saf UI mantığı)
-
+            e.preventDefault();
             const email = document.getElementById("email").value;
             const password = document.getElementById("password").value;
 
             try {
-                // MVC C# yerine doğrudan Tarayıcı üzerinden API'ye gidiyoruz
                 const response = await fetch(API_URL, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
@@ -48,18 +54,14 @@
 
                 if (response.ok) {
                     const data = await response.json();
-
-                    // Token'ı tarayıcının hafızasına (Local Storage) kaydediyoruz. MVC backend'in ruhu bile duymuyor!
                     localStorage.setItem("JWToken", data.token);
-
-                    // Giriş başarılı, Chat sayfasına git
                     window.location.href = "/Chat/Index";
                 } else {
                     document.getElementById("errorMessage").innerText = "E-posta veya şifre hatalı!";
                     document.getElementById("errorMessage").style.display = "block";
                 }
             } catch (error) {
-                console.error("API'ye bağlanılamadı:", error);
+                console.error("Hata:", error);
             }
         });
     </script>
