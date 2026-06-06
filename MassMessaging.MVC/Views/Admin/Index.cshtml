@@ -1,0 +1,146 @@
+﻿@{
+    ViewData["Title"] = "Yönetim Paneli";
+}
+
+<div class="container-fluid mt-4">
+    <div class="row">
+        <div class="col-lg-10 offset-lg-1">
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-body p-4 d-flex justify-content-between align-items-center">
+                    <div>
+                        <h3 class="fw-bold mb-1 text-primary">Sistem Yönetim Paneli</h3>
+                        <p class="text-muted mb-0">Kullanıcılar ve gruplar üzerinde tam yetki.</p>
+                    </div>
+                    <span class="badge bg-danger p-2 px-3 rounded-pill">
+                        <i class="fa-solid fa-shield-halved me-1"></i> Admin Yetkisi Aktif
+                    </span>
+                </div>
+            </div>
+
+            <div class="card modern-card shadow-sm border-0">
+                <div class="card-header bg-white border-bottom-0 pt-4">
+                    <ul class="nav nav-pills" id="adminTabs" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link active rounded-pill px-4" id="users-tab" data-bs-toggle="tab" data-bs-target="#users" type="button" role="tab">
+                                <i class="fa-solid fa-users me-2"></i>Kullanıcılar
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link rounded-pill px-4 ms-2" id="groups-tab" data-bs-toggle="tab" data-bs-target="#groups" type="button" role="tab">
+                                <i class="fa-solid fa-layer-group me-2"></i>Grup Yönetimi
+                            </button>
+                        </li>
+                    </ul>
+                </div>
+
+                <div class="card-body p-4">
+                    <div class="tab-content" id="adminTabsContent">
+                        <div class="tab-pane fade show active" id="users" role="tabpanel">
+                            <div class="table-responsive">
+                                <table class="table table-hover align-middle">
+                                    <thead class="text-uppercase text-muted small">
+                                        <tr>
+                                            <th>Ad Soyad</th>
+                                            <th>E-posta Adresi</th>
+                                            <th class="text-center">Durum</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="usersTableBody">
+                                        <tr><td colspan="3" class="text-center p-4"><div class="spinner-grow text-primary"></div></td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <div class="tab-pane fade" id="groups" role="tabpanel">
+                            <div class="row">
+                                <div class="col-md-5">
+                                    <div class="bg-light p-4 rounded-3">
+                                        <h6 class="fw-bold text-dark mb-3">Yeni Grup Oluştur</h6>
+                                        <div class="input-group">
+                                            <input type="text" id="newGroupName" class="form-control" placeholder="Grup ismi girin...">
+                                            <button onclick="createGroup()" class="btn btn-primary px-3">Ekle</button>
+                                        </div>
+                                        <div id="groupResult" class="mt-2 small fw-bold"></div>
+                                    </div>
+                                </div>
+                                <div class="col-md-7">
+                                    <h6 class="fw-bold text-dark mb-3">Sistemdeki Gruplar</h6>
+                                    <ul id="groupListUI" class="list-group list-group-flush border rounded-3">
+                                        <li class="list-group-item text-muted">Yükleniyor...</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        const API_BASE = "https://localhost:7124/api";
+        const token = localStorage.getItem("JWToken");
+
+        document.addEventListener("DOMContentLoaded", () => {
+            if(!token) { window.location.href = "/Auth/Login"; return; }
+            loadUsers();
+            loadGroups();
+        });
+
+        async function loadUsers() {
+            try {
+                const response = await fetch(`${API_BASE}/Admin/users`, { headers: { "Authorization": `Bearer ${token}` }});
+                if (response.ok) {
+                    const users = await response.json();
+                    let html = "";
+                    users.forEach(u => html += `
+                        <tr>
+                            <td><div class="fw-bold">${u.firstName} ${u.lastName}</div></td>
+                            <td class="text-muted">${u.email}</td>
+                            <td class="text-center"><span class="badge bg-success-subtle text-success rounded-pill px-3">Aktif</span></td>
+                        </tr>`);
+                    document.getElementById("usersTableBody").innerHTML = html;
+                }
+            } catch (error) { console.error(error); }
+        }
+
+        async function loadGroups() {
+            try {
+                const response = await fetch(`${API_BASE}/Group/list`, { headers: { "Authorization": `Bearer ${token}` }});
+                if (response.ok) {
+                    const groups = await response.json();
+                    let html = "";
+                    groups.forEach(g => html += `
+                        <li class="list-group-item d-flex justify-content-between align-items-center py-3">
+                            <span class="fw-medium">${g.name}</span>
+                            <span class="badge bg-dark rounded-pill">${g.id}</span>
+                        </li>`);
+                    document.getElementById("groupListUI").innerHTML = html || "<li class='list-group-item text-muted'>Grup bulunamadı.</li>";
+                }
+            } catch(error) { console.error(error); }
+        }
+
+        async function createGroup() {
+            const input = document.getElementById("newGroupName");
+            if(!input.value) return alert("Lütfen bir grup adı girin!");
+
+            const res = await fetch(`${API_BASE}/Group/create`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+                body: JSON.stringify(input.value)
+            });
+
+            if(res.ok) {
+                const resDiv = document.getElementById("groupResult");
+                resDiv.className = "mt-2 small fw-bold text-success";
+                resDiv.innerText = "Grup başarıyla oluşturuldu!";
+                input.value = "";
+                loadGroups();
+                setTimeout(() => resDiv.innerText = "", 3000);
+            }
+        }
+    </script>
+}

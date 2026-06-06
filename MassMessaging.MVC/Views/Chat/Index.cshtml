@@ -16,7 +16,6 @@
                         <small id="connStatus" class="text-warning fw-bold">🟢 Bağlanıyor...</small>
                     </div>
                 </div>
-                <button onclick="logout()" class="btn btn-outline-danger btn-sm rounded-pill px-3 fw-bold">Çıkış Yap</button>
             </div>
 
             <div class="card-body p-0">
@@ -31,19 +30,23 @@
                         <div class="col-md-6">
                             <div class="input-group input-group-sm">
                                 <span class="input-group-text bg-light border-end-0">👤</span>
-                                <input type="text" id="receiverId" class="form-control border-start-0 bg-light" placeholder="Kişiye Özel (ID)" />
+                                <select id="receiverId" class="form-select border-start-0 bg-light">
+                                    <option value="">Birebir Mesaj İçin Kişi Seçin</option>
+                                </select>
                             </div>
                         </div>
                         <div class="col-md-6">
                             <div class="input-group input-group-sm">
                                 <span class="input-group-text bg-light border-end-0">👥</span>
-                                <input type="number" id="groupId" class="form-control border-start-0 bg-light" placeholder="Gruba Özel (Grup ID)" />
+                                <select id="groupId" class="form-select border-start-0 bg-light">
+                                    <option value="">Toplu Mesaj İçin Grup Seçin</option>
+                                </select>
                             </div>
                         </div>
                     </div>
 
                     <div class="input-group input-group-lg shadow-sm rounded-pill overflow-hidden mt-2">
-                        <input type="text" id="messageInput" class="form-control border-0 px-4 bg-light" placeholder="Bir şeyler yazın..." style="font-size: 0.95em;" />
+                        <input type="text" id="messageInput" class="form-control border-0 px-4 bg-light" placeholder="Bir şeyler yazın..." />
                         <button onclick="sendMessage()" class="btn btn-primary px-4 fw-bold text-white">Gönder 🚀</button>
                     </div>
                 </div>
@@ -55,58 +58,106 @@
 @section Scripts {
     <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.0/signalr.min.js"></script>
     <script>
+        // KENDİ API PORTUNUN YAZILI OLDUĞUNDAN EMİN OL
         const API_BASE = "https://localhost:7124/api";
         const HUB_URL = "https://localhost:7124/chathub";
 
         const token = localStorage.getItem("JWToken");
         if (!token) { window.location.href = "/Auth/Login"; }
 
+        // 1. Sayfa Yüklendiğinde Kullanıcıları ve Grupları Getir
+        document.addEventListener("DOMContentLoaded", async () => {
+            await fetchUsers();
+            await fetchGroups();
+
+            // YENİ: Geçmiş mesajları API'den çek
+            // Not: Burası biraz daha karmaşık olduğu için önce bir "Kişi/Grup seçimi" yapınca
+            // o kişiyle olan geçmişi getireceğiz.
+        });
+
+        // Kişi değişince geçmişi yükle
+        document.getElementById("receiverId").addEventListener("change", async function() {
+            if(this.value) {
+                document.getElementById("chatBox").innerHTML = ""; // Ekranı temizle
+                const res = await fetch(`${API_BASE}/Message/history/${this.value}`, {
+                    headers: { "Authorization": `Bearer ${token}` }
+                });
+                const msgs = await res.json();
+                msgs.forEach(m => renderMessage(m.senderName, m.content, m.isMine));
+            }
+        });
+
+        function renderMessage(name, content, isMine) {
+            const chatBox = document.getElementById("chatBox");
+            chatBox.innerHTML += `
+                <div class="message-bubble ${isMine ? 'msg-me' : 'msg-other'}">
+                    <div class="msg-sender">${name}</div>
+                    ${content}
+                </div><div class="msg-clear"></div>`;
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+
+        async function fetchUsers() {
+            try {
+                const res = await fetch(`${API_BASE}/User/list`, { headers: { "Authorization": `Bearer ${token}` }});
+                if(res.ok){
+                    const users = await res.json();
+                    const select = document.getElementById("receiverId");
+                    users.forEach(u => select.innerHTML += `<option value="${u.id}">${u.fullName}</option>`);
+                }
+            } catch(e) { console.error("Kullanıcılar çekilemedi", e); }
+        }
+
+        async function fetchGroups() {
+            try {
+                const res = await fetch(`${API_BASE}/Group/list`, { headers: { "Authorization": `Bearer ${token}` }});
+                if(res.ok){
+                    const groups = await res.json();
+                    const select = document.getElementById("groupId");
+                    groups.forEach(g => select.innerHTML += `<option value="${g.id}">${g.name}</option>`);
+                }
+            } catch(e) { console.error("Gruplar çekilemedi", e); }
+        }
+
+        // 2. Kişi ve Grup Seçimi Mantığı (İkisi aynı anda seçilemez)
+        document.getElementById("receiverId").addEventListener("change", function() {
+            if(this.value) document.getElementById("groupId").value = "";
+        });
+        document.getElementById("groupId").addEventListener("change", function() {
+            if(this.value) document.getElementById("receiverId").value = "";
+        });
+
+        // 3. SignalR Bağlantısı
         const connection = new signalR.HubConnectionBuilder()
             .withUrl(HUB_URL, { accessTokenFactory: () => token })
             .withAutomaticReconnect()
             .build();
 
-        // 1. Karşıdan Gelen Mesaj (Beyaz Balon / Sola Yaslı)
         connection.on("ReceiveMessage", (senderId, senderName, message) => {
             const chatBox = document.getElementById("chatBox");
-            chatBox.innerHTML += `
-                <div class="message-bubble msg-other">
-                    <div class="msg-sender">${senderName}</div>
-                    ${message}
-                </div>
-                <div class="msg-clear"></div>`;
+            chatBox.innerHTML += `<div class="message-bubble msg-other"><div class="msg-sender">${senderName}</div>${message}</div><div class="msg-clear"></div>`;
             chatBox.scrollTop = chatBox.scrollHeight;
         });
 
-        // 2. Gruba Gelen Mesaj (Mavi Çizgili Beyaz Balon / Sola Yaslı)
         connection.on("ReceiveGroupMessage", (groupName, senderName, message) => {
             const chatBox = document.getElementById("chatBox");
-            chatBox.innerHTML += `
-                <div class="message-bubble msg-other msg-group">
-                    <div class="msg-sender text-primary">[Grup: ${groupName}] ${senderName}</div>
-                    ${message}
-                </div>
-                <div class="msg-clear"></div>`;
+            chatBox.innerHTML += `<div class="message-bubble msg-other msg-group"><div class="msg-sender text-primary">[${groupName}] ${senderName}</div>${message}</div><div class="msg-clear"></div>`;
             chatBox.scrollTop = chatBox.scrollHeight;
         });
 
-        // Bağlantı Durumu
         connection.start().then(() => {
             document.getElementById("connStatus").className = "text-success fw-bold small";
             document.getElementById("connStatus").innerText = "🟢 Çevrimiçi";
-        }).catch(err => {
-            document.getElementById("connStatus").className = "text-danger fw-bold small";
-            document.getElementById("connStatus").innerText = "🔴 Bağlantı Hatası";
-            console.error(err);
         });
 
-        // 3. API'ye Mesaj Gönderme (Bizim Mesajımız - Yeşil Balon / Sağa Yaslı)
+        // 4. Mesaj Gönderme
         async function sendMessage() {
             const receiverId = document.getElementById("receiverId").value;
             const groupId = document.getElementById("groupId").value;
             const content = document.getElementById("messageInput").value;
 
-            if(!content) return; // Boş mesaj atmayı engelle
+            if(!content) return;
+            if(!receiverId && !groupId) return alert("Lütfen alıcı bir kişi veya grup seçin!");
 
             const bodyData = {
                 content: content,
@@ -116,40 +167,22 @@
 
             const response = await fetch(`${API_BASE}/Message/send`, {
                 method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    "Authorization": `Bearer ${token}`
-                },
+                headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
                 body: JSON.stringify(bodyData)
             });
 
             if (response.ok) {
-                // Mesaj iletildiyse yeşil balonu ekrana bas
                 const chatBox = document.getElementById("chatBox");
-                chatBox.innerHTML += `
-                    <div class="message-bubble msg-me shadow-sm">
-                        ${content}
-                        <div class="text-end text-muted mt-1" style="font-size: 0.65em;">✓✓</div>
-                    </div>
-                    <div class="msg-clear"></div>`;
+                chatBox.innerHTML += `<div class="message-bubble msg-me shadow-sm">${content}<div class="text-end text-muted mt-1" style="font-size: 0.65em;">✓✓</div></div><div class="msg-clear"></div>`;
                 chatBox.scrollTop = chatBox.scrollHeight;
-                document.getElementById("messageInput").value = ""; // Kutuyu temizle
+                document.getElementById("messageInput").value = "";
             } else {
-                alert("Mesaj gönderilemedi! ID'yi kontrol edin.");
+                alert("Mesaj gönderilemedi!");
             }
         }
 
-        // Enter tuşuna basınca gönderme tetiklensin
         document.getElementById("messageInput").addEventListener("keypress", function(event) {
-            if (event.key === "Enter") {
-                event.preventDefault();
-                sendMessage();
-            }
+            if (event.key === "Enter") { event.preventDefault(); sendMessage(); }
         });
-
-        function logout() {
-            localStorage.removeItem("JWToken");
-            window.location.href = "/Auth/Login";
-        }
     </script>
 }

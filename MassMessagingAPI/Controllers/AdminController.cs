@@ -35,5 +35,14 @@ namespace MassMessagingAPI.Controllers
 
             return Ok(users);
         }
+        [HttpDelete("delete-user/{id}")]
+        public async Task<IActionResult> DeleteUser(string id)
+        {
+            var user = await _userManager.FindByIdAsync(id);
+            if (user == null) return NotFound();
+
+            await _userManager.DeleteAsync(user);
+            return Ok(new { Message = "Kullanıcı silindi." });
+        }
     }
 }

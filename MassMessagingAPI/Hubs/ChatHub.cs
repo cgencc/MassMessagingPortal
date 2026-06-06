@@ -42,8 +42,18 @@ namespace MassMessagingAPI.Hubs // Kendi namespace'iniz
         // Sisteme biri bağlandığında tetiklenir
         public override async Task OnConnectedAsync()
         {
-            // Kullanıcı bağlandı loglaması yapılabilir
+            var userId = Context.UserIdentifier; // Token'dan gelen ID
+                                                 // Burada veritabanında User tablosunda IsOnline = true yapabilirsin
+            await Clients.All.SendAsync("UserStatusChanged", userId, true);
             await base.OnConnectedAsync();
+        }
+
+
+        public override async Task OnDisconnectedAsync(Exception? exception)
+        {
+            var userId = Context.UserIdentifier;
+            await Clients.All.SendAsync("UserStatusChanged", userId, false);
+            await base.OnDisconnectedAsync(exception);
         }
     }
 }
