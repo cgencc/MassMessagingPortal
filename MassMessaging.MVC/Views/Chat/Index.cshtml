@@ -1,0 +1,110 @@
+﻿@{
+    ViewData["Title"] = "Canlı Sohbet Merkezi";
+}
+
+<div class="row mt-4">
+    <div class="col-md-8 offset-md-2">
+        <div class="card">
+            <div class="card-header bg-dark text-white d-flex justify-content-between">
+                <h4>Toplu Mesajlaşma (SignalR)</h4>
+                <button onclick="logout()" class="btn btn-sm btn-danger">Çıkış Yap</button>
+            </div>
+            <div class="card-body">
+                <div id="chatBox" style="height: 350px; overflow-y: scroll; border: 1px solid #ccc; padding: 15px; margin-bottom: 15px; background-color: #f8f9fa;">
+                </div>
+
+                <div class="row">
+                    <div class="col-md-4 mb-2">
+                        <input type="text" id="receiverId" class="form-control" placeholder="Alıcı ID (Birebir)" />
+                    </div>
+                    <div class="col-md-4 mb-2">
+                        <input type="number" id="groupId" class="form-control" placeholder="Grup ID (Topluluğa)" />
+                    </div>
+                    <div class="col-md-4 mb-2">
+                        <input type="text" id="messageInput" class="form-control" placeholder="Mesajınızı yazın..." />
+                    </div>
+                </div>
+                <button onclick="sendMessage()" class="btn btn-success w-100">Gönder</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.0/signalr.min.js"></script>
+    <script>
+        // KENDİ PORTLARINI BURAYA YAZ
+        const API_BASE = "https://localhost:7218/api";
+        const HUB_URL = "https://localhost:7218/chathub";
+
+        // MVC C# kullanmadan Tarayıcı hafızasından Token'ı çekiyoruz
+        const token = localStorage.getItem("JWToken");
+
+        // Eğer token yoksa adam kaçak girmiştir, Login'e postala
+        if (!token) {
+            window.location.href = "/Auth/Login";
+        }
+
+        // 1. SignalR Bağlantısını Kur
+        const connection = new signalR.HubConnectionBuilder()
+            .withUrl(HUB_URL, { accessTokenFactory: () => token })
+            .withAutomaticReconnect()
+            .build();
+
+        // 2. Birebir Mesaj Geldiğinde
+        connection.on("ReceiveMessage", (senderId, senderName, message) => {
+            const chatBox = document.getElementById("chatBox");
+            chatBox.innerHTML += `<div class="mb-2 p-2 border rounded bg-white"><strong>${senderName}:</strong> ${message}</div>`;
+            chatBox.scrollTop = chatBox.scrollHeight;
+        });
+
+        // 3. Grup Mesajı Geldiğinde
+        connection.on("ReceiveGroupMessage", (groupName, senderName, message) => {
+            const chatBox = document.getElementById("chatBox");
+            chatBox.innerHTML += `<div class="mb-2 p-2 border rounded text-primary" style="background-color:#eef"><strong>[Grup: ${groupName}] ${senderName}:</strong> ${message}</div>`;
+            chatBox.scrollTop = chatBox.scrollHeight;
+        });
+
+        connection.start().then(() => {
+            document.getElementById("chatBox").innerHTML += `<div class="text-success small fw-bold">🟢 Canlı sisteme bağlanıldı!</div>`;
+        }).catch(err => console.error(err));
+
+        // 4. API'ye Mesaj Gönderme İsteği At (Sıfır C# kodu)
+        async function sendMessage() {
+            const receiverId = document.getElementById("receiverId").value;
+            const groupId = document.getElementById("groupId").value;
+            const content = document.getElementById("messageInput").value;
+
+            if(!content) return alert("Mesaj boş olamaz!");
+
+            const bodyData = {
+                content: content,
+                receiverId: receiverId ? receiverId : null,
+                groupId: groupId ? parseInt(groupId) : null
+            };
+
+            const response = await fetch(`${API_BASE}/Message/send`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${token}` // Token'ı header'a koyduk
+                },
+                body: JSON.stringify(bodyData)
+            });
+
+            if (response.ok) {
+                const chatBox = document.getElementById("chatBox");
+                chatBox.innerHTML += `<div class="mb-2 p-2 border rounded text-end" style="background-color:#d4edda"><strong>Sen:</strong> ${content}</div>`;
+                chatBox.scrollTop = chatBox.scrollHeight;
+                document.getElementById("messageInput").value = "";
+            } else {
+                alert("Mesaj iletilemedi! Yetkiniz olmayabilir.");
+            }
+        }
+
+        function logout() {
+            localStorage.removeItem("JWToken"); // Hafızayı sil
+            window.location.href = "/Auth/Login"; // Çıkış yap
+        }
+    </script>
+}
