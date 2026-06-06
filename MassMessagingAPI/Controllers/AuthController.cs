@@ -46,8 +46,8 @@ namespace MassMessagingAPI.Controllers
 
             if (user != null && await _userManager.CheckPasswordAsync(user, model.Password))
             {
-                // Uzun uzun kod yazmak yerine temiz bir şekilde servisi çağırıyoruz
-                var token = _tokenService.GenerateToken(user);
+                // GenerateToken yerine await ile yeni asenkron metodumuzu çağırıyoruz
+                var token = await _tokenService.GenerateTokenAsync(user);
                 return Ok(new { Token = token, Message = "Giriş başarılı!" });
             }
 

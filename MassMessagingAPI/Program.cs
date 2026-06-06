@@ -110,4 +110,19 @@ app.UseAuthorization();  // 2. Yetkin var mý? (Role)
 app.MapControllers();
 app.MapHub<MassMessagingAPI.Hubs.ChatHub>("/chathub"); // Hub'ýn dýþarýya açýlacaðý adres
 
+// Uygulama baþlarken Rolleri ve Kurucu Admin'i otomatik oluþturur
+using (var scope = app.Services.CreateScope())
+{
+    var services = scope.ServiceProvider;
+    try
+    {
+        await MassMessagingAPI.Data.SeedData.InitializeAsync(services);
+    }
+    catch (Exception ex)
+    {
+        var logger = services.GetRequiredService<ILogger<Program>>();
+        logger.LogError(ex, "Veritabaný baþlangýç verileri yüklenirken hata oluþtu.");
+    }
+}
+
 app.Run();

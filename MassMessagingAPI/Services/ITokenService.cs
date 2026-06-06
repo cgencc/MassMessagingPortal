@@ -4,6 +4,7 @@ namespace MassMessagingAPI.Services
 {
     public interface ITokenService
     {
-        string GenerateToken(AppUser user);
+        // Geri dönüş tipini Task<string> yaparak asenkron hale getirdik
+        Task<string> GenerateTokenAsync(AppUser user);
     }
 }
