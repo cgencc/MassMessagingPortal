@@ -1,0 +1,6 @@
+@MassMessagingAPI_HostAddress = http://localhost:5024
+
+GET {{MassMessagingAPI_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
