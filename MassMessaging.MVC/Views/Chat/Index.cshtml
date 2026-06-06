@@ -4,8 +4,7 @@
 
 <div class="row mt-4 justify-content-center">
     <div class="col-lg-10">
-        <div class="card modern-card overflow-hidden">
-
+        <div class="card modern-card overflow-hidden shadow-sm">
             <div class="card-header bg-white border-bottom p-3 d-flex justify-content-between align-items-center">
                 <div class="d-flex align-items-center">
                     <div class="bg-primary text-white rounded-circle d-flex justify-content-center align-items-center me-3 shadow-sm" style="width: 45px; height: 45px;">
@@ -21,27 +20,21 @@
             <div class="card-body p-0">
                 <div id="chatBox" class="chat-container">
                     <div class="text-center text-muted small my-3 p-2 bg-light rounded-pill mx-auto d-inline-block" style="opacity: 0.8">
-                        Sohbete katıldınız. Mesajlarınız uçtan uca şifrelenmiştir.
+                        Sohbete katıldınız.
                     </div>
                 </div>
 
                 <div class="bg-white p-3 border-top">
                     <div class="row g-2 mb-2">
                         <div class="col-md-6">
-                            <div class="input-group input-group-sm">
-                                <span class="input-group-text bg-light border-end-0">👤</span>
-                                <select id="receiverId" class="form-select border-start-0 bg-light">
-                                    <option value="">Birebir Mesaj İçin Kişi Seçin</option>
-                                </select>
-                            </div>
+                            <select id="receiverId" class="form-select form-select-sm bg-light">
+                                <option value="">Kişi Seçin</option>
+                            </select>
                         </div>
                         <div class="col-md-6">
-                            <div class="input-group input-group-sm">
-                                <span class="input-group-text bg-light border-end-0">👥</span>
-                                <select id="groupId" class="form-select border-start-0 bg-light">
-                                    <option value="">Toplu Mesaj İçin Grup Seçin</option>
-                                </select>
-                            </div>
+                            <select id="groupId" class="form-select form-select-sm bg-light">
+                                <option value="">Grup Seçin</option>
+                            </select>
                         </div>
                     </div>
 
@@ -58,35 +51,51 @@
 @section Scripts {
     <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.0/signalr.min.js"></script>
     <script>
-        // KENDİ API PORTUNUN YAZILI OLDUĞUNDAN EMİN OL
         const API_BASE = "https://localhost:7124/api";
         const HUB_URL = "https://localhost:7124/chathub";
-
         const token = localStorage.getItem("JWToken");
+
         if (!token) { window.location.href = "/Auth/Login"; }
 
-        // 1. Sayfa Yüklendiğinde Kullanıcıları ve Grupları Getir
-        document.addEventListener("DOMContentLoaded", async () => {
-            await fetchUsers();
-            await fetchGroups();
-
-            // YENİ: Geçmiş mesajları API'den çek
-            // Not: Burası biraz daha karmaşık olduğu için önce bir "Kişi/Grup seçimi" yapınca
-            // o kişiyle olan geçmişi getireceğiz.
+        // Event Listeners
+        document.addEventListener("DOMContentLoaded", () => {
+            fetchUsers();
+            fetchGroups();
         });
 
-        // Kişi değişince geçmişi yükle
-        document.getElementById("receiverId").addEventListener("change", async function() {
+        // Dropdown Değişimi: Grup veya Kişi seçilince temizle
+        document.getElementById("receiverId").addEventListener("change", function() {
             if(this.value) {
-                document.getElementById("chatBox").innerHTML = ""; // Ekranı temizle
-                const res = await fetch(`${API_BASE}/Message/history/${this.value}`, {
-                    headers: { "Authorization": `Bearer ${token}` }
-                });
-                const msgs = await res.json();
-                msgs.forEach(m => renderMessage(m.senderName, m.content, m.isMine));
+                document.getElementById("groupId").value = "";
+                loadHistory(this.value, 'user');
             }
         });
 
+        document.getElementById("groupId").addEventListener("change", function() {
+            if(this.value) {
+                document.getElementById("receiverId").value = "";
+                loadHistory(this.value, 'group');
+            }
+        });
+
+        // Mesaj Geçmişini Yükle
+        async function loadHistory(id, type) {
+            const chatBox = document.getElementById("chatBox");
+            chatBox.innerHTML = '<div class="text-center p-3 text-muted">Mesajlar yükleniyor...</div>';
+
+            try {
+                const res = await fetch(`${API_BASE}/Message/history/${id}`, {
+                    headers: { "Authorization": `Bearer ${token}` }
+                });
+                if(res.ok) {
+                    const msgs = await res.json();
+                    chatBox.innerHTML = "";
+                    msgs.forEach(m => renderMessage(m.senderName, m.content, m.isMine));
+                }
+            } catch(e) { console.error(e); }
+        }
+
+        // Render Message
         function renderMessage(name, content, isMine) {
             const chatBox = document.getElementById("chatBox");
             chatBox.innerHTML += `
@@ -97,92 +106,57 @@
             chatBox.scrollTop = chatBox.scrollHeight;
         }
 
+        // Fetch Data
         async function fetchUsers() {
-            try {
-                const res = await fetch(`${API_BASE}/User/list`, { headers: { "Authorization": `Bearer ${token}` }});
-                if(res.ok){
-                    const users = await res.json();
-                    const select = document.getElementById("receiverId");
-                    users.forEach(u => select.innerHTML += `<option value="${u.id}">${u.fullName}</option>`);
-                }
-            } catch(e) { console.error("Kullanıcılar çekilemedi", e); }
+            const res = await fetch(`${API_BASE}/User/list`, { headers: { "Authorization": `Bearer ${token}` }});
+            if(res.ok){
+                const users = await res.json();
+                const select = document.getElementById("receiverId");
+                users.forEach(u => select.innerHTML += `<option value="${u.id}">${u.fullName}</option>`);
+            }
         }
 
         async function fetchGroups() {
-            try {
-                const res = await fetch(`${API_BASE}/Group/list`, { headers: { "Authorization": `Bearer ${token}` }});
-                if(res.ok){
-                    const groups = await res.json();
-                    const select = document.getElementById("groupId");
-                    groups.forEach(g => select.innerHTML += `<option value="${g.id}">${g.name}</option>`);
-                }
-            } catch(e) { console.error("Gruplar çekilemedi", e); }
+            const res = await fetch(`${API_BASE}/Group/list`, { headers: { "Authorization": `Bearer ${token}` }});
+            if(res.ok){
+                const groups = await res.json();
+                const select = document.getElementById("groupId");
+                groups.forEach(g => select.innerHTML += `<option value="${g.id}">${g.name}</option>`);
+            }
         }
 
-        // 2. Kişi ve Grup Seçimi Mantığı (İkisi aynı anda seçilemez)
-        document.getElementById("receiverId").addEventListener("change", function() {
-            if(this.value) document.getElementById("groupId").value = "";
-        });
-        document.getElementById("groupId").addEventListener("change", function() {
-            if(this.value) document.getElementById("receiverId").value = "";
-        });
-
-        // 3. SignalR Bağlantısı
+        // SignalR
         const connection = new signalR.HubConnectionBuilder()
             .withUrl(HUB_URL, { accessTokenFactory: () => token })
             .withAutomaticReconnect()
             .build();
 
-        connection.on("ReceiveMessage", (senderId, senderName, message) => {
-            const chatBox = document.getElementById("chatBox");
-            chatBox.innerHTML += `<div class="message-bubble msg-other"><div class="msg-sender">${senderName}</div>${message}</div><div class="msg-clear"></div>`;
-            chatBox.scrollTop = chatBox.scrollHeight;
-        });
-
-        connection.on("ReceiveGroupMessage", (groupName, senderName, message) => {
-            const chatBox = document.getElementById("chatBox");
-            chatBox.innerHTML += `<div class="message-bubble msg-other msg-group"><div class="msg-sender text-primary">[${groupName}] ${senderName}</div>${message}</div><div class="msg-clear"></div>`;
-            chatBox.scrollTop = chatBox.scrollHeight;
-        });
+        connection.on("ReceiveMessage", (senderId, senderName, message) => renderMessage(senderName, message, false));
+        connection.on("ReceiveGroupMessage", (groupName, senderName, message) => renderMessage(`[${groupName}] ${senderName}`, message, false));
 
         connection.start().then(() => {
-            document.getElementById("connStatus").className = "text-success fw-bold small";
             document.getElementById("connStatus").innerText = "🟢 Çevrimiçi";
         });
 
-        // 4. Mesaj Gönderme
         async function sendMessage() {
             const receiverId = document.getElementById("receiverId").value;
             const groupId = document.getElementById("groupId").value;
             const content = document.getElementById("messageInput").value;
 
-            if(!content) return;
-            if(!receiverId && !groupId) return alert("Lütfen alıcı bir kişi veya grup seçin!");
+            if(!content || (!receiverId && !groupId)) return;
 
-            const bodyData = {
-                content: content,
-                receiverId: receiverId ? receiverId : null,
-                groupId: groupId ? parseInt(groupId) : null
-            };
-
-            const response = await fetch(`${API_BASE}/Message/send`, {
+            const res = await fetch(`${API_BASE}/Message/send`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
-                body: JSON.stringify(bodyData)
+                body: JSON.stringify({ content, receiverId: receiverId || null, groupId: groupId ? parseInt(groupId) : null })
             });
 
-            if (response.ok) {
-                const chatBox = document.getElementById("chatBox");
-                chatBox.innerHTML += `<div class="message-bubble msg-me shadow-sm">${content}<div class="text-end text-muted mt-1" style="font-size: 0.65em;">✓✓</div></div><div class="msg-clear"></div>`;
-                chatBox.scrollTop = chatBox.scrollHeight;
+            if(res.ok) {
+                renderMessage("Sen", content, true);
                 document.getElementById("messageInput").value = "";
-            } else {
-                alert("Mesaj gönderilemedi!");
             }
         }
 
-        document.getElementById("messageInput").addEventListener("keypress", function(event) {
-            if (event.key === "Enter") { event.preventDefault(); sendMessage(); }
-        });
+        document.getElementById("messageInput").addEventListener("keypress", e => { if(e.key === "Enter") sendMessage(); });
     </script>
 }
