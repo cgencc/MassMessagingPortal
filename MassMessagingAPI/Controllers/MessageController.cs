@@ -100,5 +100,20 @@ namespace MassMessagingAPI.Controllers
 
             return Ok();
         }
+        [HttpPost("upload-file")]
+        public async Task<IActionResult> UploadFile(IFormFile file)
+        {
+            if (file == null || file.Length == 0) return BadRequest("Dosya seçilmedi.");
+
+            var fileName = Guid.NewGuid().ToString() + Path.GetExtension(file.FileName);
+            var path = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot/uploads", fileName);
+
+            using (var stream = new FileStream(path, FileMode.Create))
+            {
+                await file.CopyToAsync(stream);
+            }
+
+            return Ok(new { url = "/uploads/" + fileName });
+        }
     }
 }

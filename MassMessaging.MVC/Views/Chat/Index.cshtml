@@ -1,47 +1,43 @@
 ﻿@{
-    ViewData["Title"] = "Canlı Mesajlaşma";
+    ViewData["Title"] = "İletişim Portalı";
 }
 
 <div class="row mt-4 justify-content-center">
     <div class="col-lg-10">
         <div class="card modern-card overflow-hidden shadow-sm">
-            <div class="card-header bg-white border-bottom p-3 d-flex justify-content-between align-items-center">
-                <div class="d-flex align-items-center">
-                    <div class="bg-primary text-white rounded-circle d-flex justify-content-center align-items-center me-3 shadow-sm" style="width: 45px; height: 45px;">
-                        <span class="fs-5">💬</span>
-                    </div>
-                    <div>
-                        <h5 class="mb-0 fw-bold text-dark">İletişim Portalı</h5>
-                        <small id="connStatus" class="text-warning fw-bold">🟢 Bağlanıyor...</small>
-                    </div>
+            <div class="card-header bg-white border-bottom p-3 d-flex align-items-center">
+                <div class="bg-primary text-white rounded-circle d-flex justify-content-center align-items-center me-3 shadow-sm" style="width: 45px; height: 45px;">
+                    <span class="fs-5">💬</span>
+                </div>
+                <div>
+                    <h5 class="mb-0 fw-bold text-dark">İletişim Portalı</h5>
+                    <small id="connStatus" class="text-warning fw-bold"><i class="fa-solid fa-circle fa-2xs me-1"></i> Bağlanıyor...</small>
                 </div>
             </div>
 
-            <div class="card-body p-0">
-                <div id="chatBox" class="chat-container">
-                    <div class="text-center text-muted small my-3 p-2 bg-light rounded-pill mx-auto d-inline-block" style="opacity: 0.8">
-                        Sohbete katıldınız.
+            <div id="chatBox" class="chat-container">
+                <div class="text-center text-muted small my-3 p-2 bg-light rounded-pill mx-auto d-inline-block">
+                    Sohbete hoş geldiniz.
+                </div>
+            </div>
+
+            <div class="bg-white p-3 border-top">
+                <div class="row g-2 mb-2">
+                    <div class="col-md-6">
+                        <select id="receiverId" class="form-select form-select-sm bg-light shadow-none">
+                            <option value="">👤 Kişi Seçin</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <select id="groupId" class="form-select form-select-sm bg-light shadow-none">
+                            <option value="">👥 Grup Seçin</option>
+                        </select>
                     </div>
                 </div>
 
-                <div class="bg-white p-3 border-top">
-                    <div class="row g-2 mb-2">
-                        <div class="col-md-6">
-                            <select id="receiverId" class="form-select form-select-sm bg-light">
-                                <option value="">Kişi Seçin</option>
-                            </select>
-                        </div>
-                        <div class="col-md-6">
-                            <select id="groupId" class="form-select form-select-sm bg-light">
-                                <option value="">Grup Seçin</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    <div class="input-group input-group-lg shadow-sm rounded-pill overflow-hidden mt-2">
-                        <input type="text" id="messageInput" class="form-control border-0 px-4 bg-light" placeholder="Bir şeyler yazın..." />
-                        <button onclick="sendMessage()" class="btn btn-primary px-4 fw-bold text-white">Gönder 🚀</button>
-                    </div>
+                <div class="input-group input-group-lg shadow-sm rounded-pill overflow-hidden mt-2">
+                    <input type="text" id="messageInput" class="form-control border-0 px-4 bg-light" placeholder="Mesajınızı yazın..." />
+                    <button onclick="sendMessage()" class="btn btn-primary px-4 fw-bold">Gönder <i class="fa-solid fa-paper-plane ms-1"></i></button>
                 </div>
             </div>
         </div>
@@ -55,77 +51,74 @@
         const HUB_URL = "https://localhost:7124/chathub";
         const token = localStorage.getItem("JWToken");
 
-        if (!token) { window.location.href = "/Auth/Login"; }
+        if (!token) window.location.href = "/Auth/Login";
 
-        // Event Listeners
+        // Kullanıcı Adını Token'dan alalım (Senior hamlesi: "Sen" yerine isim yazsın)
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        const myName = payload["FirstName"] || "Sen";
+
         document.addEventListener("DOMContentLoaded", () => {
             fetchUsers();
             fetchGroups();
         });
 
-        // Dropdown Değişimi: Grup veya Kişi seçilince temizle
+        // History ve Durum Yönetimi
         document.getElementById("receiverId").addEventListener("change", function() {
             if(this.value) {
                 document.getElementById("groupId").value = "";
-                loadHistory(this.value, 'user');
+                loadHistory(this.value);
             }
         });
 
         document.getElementById("groupId").addEventListener("change", function() {
             if(this.value) {
                 document.getElementById("receiverId").value = "";
-                loadHistory(this.value, 'group');
+                loadHistory(this.value, true);
             }
         });
 
-        // Mesaj Geçmişini Yükle
-        async function loadHistory(id, type) {
+        async function loadHistory(id, isGroup = false) {
             const chatBox = document.getElementById("chatBox");
             chatBox.innerHTML = '<div class="text-center p-3 text-muted">Mesajlar yükleniyor...</div>';
 
-            try {
-                const res = await fetch(`${API_BASE}/Message/history/${id}`, {
-                    headers: { "Authorization": `Bearer ${token}` }
-                });
-                if(res.ok) {
-                    const msgs = await res.json();
-                    chatBox.innerHTML = "";
-                    msgs.forEach(m => renderMessage(m.senderName, m.content, m.isMine));
-                }
-            } catch(e) { console.error(e); }
+            const res = await fetch(`${API_BASE}/Message/history/${id}`, { headers: { "Authorization": `Bearer ${token}` }});
+            if(res.ok) {
+                const msgs = await res.json();
+                chatBox.innerHTML = "";
+                msgs.forEach(m => renderMessage(m.senderName, m.content, m.isMine));
+            }
         }
 
-        // Render Message
         function renderMessage(name, content, isMine) {
             const chatBox = document.getElementById("chatBox");
             chatBox.innerHTML += `
                 <div class="message-bubble ${isMine ? 'msg-me' : 'msg-other'}">
-                    <div class="msg-sender">${name}</div>
+                    <div class="msg-sender">${isMine ? 'Ben' : name}</div>
                     ${content}
                 </div><div class="msg-clear"></div>`;
             chatBox.scrollTop = chatBox.scrollHeight;
         }
 
-        // Fetch Data
-        async function fetchUsers() {
-            const res = await fetch(`${API_BASE}/User/list`, { headers: { "Authorization": `Bearer ${token}` }});
-            if(res.ok){
-                const users = await res.json();
-                const select = document.getElementById("receiverId");
-                users.forEach(u => select.innerHTML += `<option value="${u.id}">${u.fullName}</option>`);
+        async function sendMessage() {
+            const rId = document.getElementById("receiverId").value;
+            const gId = document.getElementById("groupId").value;
+            const content = document.getElementById("messageInput").value;
+
+            if(!content || (!rId && !gId)) return;
+
+            const res = await fetch(`${API_BASE}/Message/send`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+                body: JSON.stringify({ content, receiverId: rId || null, groupId: gId ? parseInt(gId) : null })
+            });
+
+            if(res.ok) {
+                renderMessage(myName, content, true);
+                document.getElementById("messageInput").value = "";
             }
         }
 
-        async function fetchGroups() {
-            const res = await fetch(`${API_BASE}/Group/list`, { headers: { "Authorization": `Bearer ${token}` }});
-            if(res.ok){
-                const groups = await res.json();
-                const select = document.getElementById("groupId");
-                groups.forEach(g => select.innerHTML += `<option value="${g.id}">${g.name}</option>`);
-            }
-        }
-
-        // SignalR
+        // --- SignalR Bağlantısı ---
         const connection = new signalR.HubConnectionBuilder()
             .withUrl(HUB_URL, { accessTokenFactory: () => token })
             .withAutomaticReconnect()
@@ -135,27 +128,8 @@
         connection.on("ReceiveGroupMessage", (groupName, senderName, message) => renderMessage(`[${groupName}] ${senderName}`, message, false));
 
         connection.start().then(() => {
-            document.getElementById("connStatus").innerText = "🟢 Çevrimiçi";
+            document.getElementById("connStatus").innerHTML = '<i class="fa-solid fa-circle text-success me-1"></i> Çevrimiçi';
         });
-
-        async function sendMessage() {
-            const receiverId = document.getElementById("receiverId").value;
-            const groupId = document.getElementById("groupId").value;
-            const content = document.getElementById("messageInput").value;
-
-            if(!content || (!receiverId && !groupId)) return;
-
-            const res = await fetch(`${API_BASE}/Message/send`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
-                body: JSON.stringify({ content, receiverId: receiverId || null, groupId: groupId ? parseInt(groupId) : null })
-            });
-
-            if(res.ok) {
-                renderMessage("Sen", content, true);
-                document.getElementById("messageInput").value = "";
-            }
-        }
 
         document.getElementById("messageInput").addEventListener("keypress", e => { if(e.key === "Enter") sendMessage(); });
     </script>
