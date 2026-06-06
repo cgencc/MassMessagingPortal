@@ -115,5 +115,12 @@ namespace MassMessagingAPI.Controllers
 
             return Ok(new { url = "/uploads/" + fileName });
         }
+        [HttpPost("send-admin")]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> SendAdminMessage([FromBody] string content)
+        {
+            await _hubContext.Clients.All.SendAsync("ReceiveAdminMessage", content);
+            return Ok();
+        }
     }
 }

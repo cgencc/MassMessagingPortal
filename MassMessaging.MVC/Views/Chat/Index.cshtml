@@ -2,44 +2,47 @@
     ViewData["Title"] = "İletişim Portalı";
 }
 
-<div class="row mt-4 justify-content-center">
-    <div class="col-lg-10">
-        <div class="card modern-card overflow-hidden shadow-sm">
-            <div class="card-header bg-white border-bottom p-3 d-flex align-items-center">
-                <div class="bg-primary text-white rounded-circle d-flex justify-content-center align-items-center me-3 shadow-sm" style="width: 45px; height: 45px;">
-                    <span class="fs-5">💬</span>
-                </div>
-                <div>
-                    <h5 class="mb-0 fw-bold text-dark">İletişim Portalı</h5>
-                    <small id="connStatus" class="text-warning fw-bold"><i class="fa-solid fa-circle fa-2xs me-1"></i> Bağlanıyor...</small>
-                </div>
-            </div>
+<style>
+    .chat-list-item {
+        cursor: pointer;
+        padding: 15px;
+        border-bottom: 1px solid #eee;
+        transition: 0.3s;
+    }
 
-            <div id="chatBox" class="chat-container">
-                <div class="text-center text-muted small my-3 p-2 bg-light rounded-pill mx-auto d-inline-block">
-                    Sohbete hoş geldiniz.
-                </div>
-            </div>
+        .chat-list-item:hover, .active-chat {
+            background-color: #e2e3e5 !important;
+            border-left: 5px solid #0d6efd;
+        }
 
-            <div class="bg-white p-3 border-top">
-                <div class="row g-2 mb-2">
-                    <div class="col-md-6">
-                        <select id="receiverId" class="form-select form-select-sm bg-light shadow-none">
-                            <option value="">👤 Kişi Seçin</option>
-                        </select>
-                    </div>
-                    <div class="col-md-6">
-                        <select id="groupId" class="form-select form-select-sm bg-light shadow-none">
-                            <option value="">👥 Grup Seçin</option>
-                        </select>
-                    </div>
-                </div>
+    .msg-me {
+        background-color: #d1e7dd;
+        align-self: flex-end;
+    }
 
-                <div class="input-group input-group-lg shadow-sm rounded-pill overflow-hidden mt-2">
-                    <input type="text" id="messageInput" class="form-control border-0 px-4 bg-light" placeholder="Mesajınızı yazın..." />
-                    <button onclick="sendMessage()" class="btn btn-primary px-4 fw-bold">Gönder <i class="fa-solid fa-paper-plane ms-1"></i></button>
-                </div>
-            </div>
+    .msg-other {
+        background-color: #ffffff;
+        align-self: flex-start;
+    }
+</style>
+
+<div class="row g-0 mt-3" style="height: 85vh;">
+    <div class="col-md-3 border-end bg-white">
+        <div class="p-3 border-bottom bg-light fw-bold">Sohbetler</div>
+        <div id="chatList" style="overflow-y:auto; height:100%;"></div>
+    </div>
+
+    <div class="col-md-9 d-flex flex-column bg-white">
+        <div id="adminPin" class="alert alert-warning m-0" style="display:none; border-radius:0;"></div>
+        <div id="chatBox" class="flex-grow-1 p-3 d-flex flex-column" style="overflow-y:auto; background: #e5ddd5; gap: 10px;"></div>
+
+        <div class="p-2 border-top bg-light d-flex align-items-center">
+            <input type="file" id="mediaInput" accept="image/*,video/*" style="display:none" onchange="handleFileSelect(event)">
+            <button class="btn btn-outline-secondary btn-sm" onclick="document.getElementById('mediaInput').click()">📎</button>
+            <button class="btn btn-outline-secondary btn-sm ms-2" onclick="startCamera()">📷</button>
+
+            <input type="text" id="messageInput" class="form-control mx-2 rounded-pill" placeholder="Bir şeyler yazın...">
+            <button onclick="sendMessage()" class="btn btn-primary rounded-pill">Gönder 🚀</button>
         </div>
     </div>
 </div>
@@ -48,89 +51,87 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.0/signalr.min.js"></script>
     <script>
         const API_BASE = "https://localhost:7124/api";
-        const HUB_URL = "https://localhost:7124/chathub";
         const token = localStorage.getItem("JWToken");
+        let activeId = null;
+        let isGroup = false;
 
-        if (!token) window.location.href = "/Auth/Login";
+        document.addEventListener("DOMContentLoaded", loadLists);
 
-        // Kullanıcı Adını Token'dan alalım (Senior hamlesi: "Sen" yerine isim yazsın)
-        const payload = JSON.parse(atob(token.split('.')[1]));
-        const myName = payload["FirstName"] || "Sen";
+        // 1. Liste Yükleme
+        async function loadLists() {
+            const list = document.getElementById("chatList");
+            const [uRes, gRes] = await Promise.all([
+                fetch(`${API_BASE}/User/list`, { headers: { "Authorization": `Bearer ${token}` }}),
+                fetch(`${API_BASE}/Group/list`, { headers: { "Authorization": `Bearer ${token}` }})
+            ]);
+            const users = await uRes.json();
+            const groups = await gRes.json();
 
-        document.addEventListener("DOMContentLoaded", () => {
-            fetchUsers();
-            fetchGroups();
-        });
-
-        // History ve Durum Yönetimi
-        document.getElementById("receiverId").addEventListener("change", function() {
-            if(this.value) {
-                document.getElementById("groupId").value = "";
-                loadHistory(this.value);
-            }
-        });
-
-        document.getElementById("groupId").addEventListener("change", function() {
-            if(this.value) {
-                document.getElementById("receiverId").value = "";
-                loadHistory(this.value, true);
-            }
-        });
-
-        async function loadHistory(id, isGroup = false) {
-            const chatBox = document.getElementById("chatBox");
-            chatBox.innerHTML = '<div class="text-center p-3 text-muted">Mesajlar yükleniyor...</div>';
-
-            const res = await fetch(`${API_BASE}/Message/history/${id}`, { headers: { "Authorization": `Bearer ${token}` }});
-            if(res.ok) {
-                const msgs = await res.json();
-                chatBox.innerHTML = "";
-                msgs.forEach(m => renderMessage(m.senderName, m.content, m.isMine));
-            }
+            list.innerHTML = "";
+            users.forEach(u => list.innerHTML += `<div class="chat-list-item" onclick="startChat('${u.id}', false, this)">👤 ${u.fullName}</div>`);
+            groups.forEach(g => list.innerHTML += `<div class="chat-list-item" onclick="startChat('${g.id}', true, this)">👥 ${g.name}</div>`);
         }
 
+        // 2. Sohbet Başlat
+        function startChat(id, group, element) {
+            activeId = id; isGroup = group;
+            document.querySelectorAll('.chat-list-item').forEach(el => el.classList.remove('active-chat'));
+            element.classList.add('active-chat');
+            loadHistory(id);
+        }
+
+        // 3. Mesaj Geçmişi
+        async function loadHistory(id) {
+            const chatBox = document.getElementById("chatBox");
+            chatBox.innerHTML = '<div class="text-center text-muted">Yükleniyor...</div>';
+            const res = await fetch(`${API_BASE}/Message/history/${id}`, { headers: { "Authorization": `Bearer ${token}` }});
+            const msgs = await res.json();
+            chatBox.innerHTML = "";
+            msgs.forEach(m => renderMessage(m.senderName, m.content, m.isMine));
+        }
+
+        // 4. Render
         function renderMessage(name, content, isMine) {
             const chatBox = document.getElementById("chatBox");
-            chatBox.innerHTML += `
-                <div class="message-bubble ${isMine ? 'msg-me' : 'msg-other'}">
-                    <div class="msg-sender">${isMine ? 'Ben' : name}</div>
-                    ${content}
-                </div><div class="msg-clear"></div>`;
+            chatBox.innerHTML += `<div class="p-2 rounded ${isMine ? 'msg-me' : 'msg-other'}" style="max-width:70%; border:1px solid #ccc;">
+                <small style="display:block; font-size:10px; color:#555;">${name}</small>${content}</div>`;
             chatBox.scrollTop = chatBox.scrollHeight;
         }
 
-        async function sendMessage() {
-            const rId = document.getElementById("receiverId").value;
-            const gId = document.getElementById("groupId").value;
-            const content = document.getElementById("messageInput").value;
-
-            if(!content || (!rId && !gId)) return;
+        // 5. Mesaj Gönderimi
+        async function sendMessage(content = null) {
+            const text = content || document.getElementById("messageInput").value;
+            if(!text || !activeId) return;
 
             const res = await fetch(`${API_BASE}/Message/send`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
-                body: JSON.stringify({ content, receiverId: rId || null, groupId: gId ? parseInt(gId) : null })
+                body: JSON.stringify({ content: text, [isGroup ? 'groupId' : 'receiverId']: isGroup ? parseInt(activeId) : activeId })
             });
 
             if(res.ok) {
-                renderMessage(myName, content, true);
-                document.getElementById("messageInput").value = "";
+                renderMessage("Ben", text, true);
+                if(!content) document.getElementById("messageInput").value = "";
             }
         }
 
-        // --- SignalR Bağlantısı ---
-        const connection = new signalR.HubConnectionBuilder()
-            .withUrl(HUB_URL, { accessTokenFactory: () => token })
-            .withAutomaticReconnect()
-            .build();
+        // 6. Medya Yükleme
+        async function handleFileSelect(e) {
+            const formData = new FormData();
+            formData.append("file", e.target.files[0]);
+            const res = await fetch(`${API_BASE}/Message/upload-file`, { method: "POST", body: formData });
+            const data = await res.json();
+            sendMessage(`<img src="${data.url}" style="max-width:150px;">`);
+        }
 
-        connection.on("ReceiveMessage", (senderId, senderName, message) => renderMessage(senderName, message, false));
-        connection.on("ReceiveGroupMessage", (groupName, senderName, message) => renderMessage(`[${groupName}] ${senderName}`, message, false));
-
-        connection.start().then(() => {
-            document.getElementById("connStatus").innerHTML = '<i class="fa-solid fa-circle text-success me-1"></i> Çevrimiçi';
-        });
-
-        document.getElementById("messageInput").addEventListener("keypress", e => { if(e.key === "Enter") sendMessage(); });
+        // 7. Kamera
+        async function startCamera() {
+            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+            const video = document.createElement("video");
+            video.srcObject = stream;
+            video.play();
+            // Burada snapshot alıp sendMessage ile yollayabilirsin
+            alert("Kamera izni alındı, video elementini modal olarak ekleyebilirsin.");
+        }
     </script>
 }
