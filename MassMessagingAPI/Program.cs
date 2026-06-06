@@ -1,5 +1,5 @@
-using MassMessagingAPI.Data; // Kendi namespace'inize göre düzeltin
-using MassMessagingAPI.Models; // Kendi namespace'inize göre düzeltin
+using MassMessagingAPI.Data;
+using MassMessagingAPI.Models;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -9,14 +9,13 @@ using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// 1. Veritabaný Baðlantýsýný (SQL Server) Sisteme Ekle
+// 1. Veritabaný Baðlantýsý
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-// 2. Identity (Üyelik Sistemi) Ayarlarý
+// 2. Identity Ayarlarý
 builder.Services.AddIdentity<AppUser, IdentityRole>(options =>
 {
-    // Test amaçlý þifre kurallarýný esnetiyoruz
     options.Password.RequireDigit = false;
     options.Password.RequiredLength = 6;
     options.Password.RequireNonAlphanumeric = false;
@@ -26,12 +25,11 @@ builder.Services.AddIdentity<AppUser, IdentityRole>(options =>
 .AddEntityFrameworkStores<AppDbContext>()
 .AddDefaultTokenProviders();
 
-// 3. JWT (Token Bazlý Kimlik Doðrulama) Ayarlarý
+// 3. JWT Ayarlarý
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
     options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
-    options.DefaultScheme = JwtBearerDefaults.AuthenticationScheme;
 })
 .AddJwtBearer(options =>
 {
@@ -47,9 +45,8 @@ builder.Services.AddAuthentication(options =>
     };
 });
 
-// 4. Controller ve Swagger Ayarlarý (Swagger üzerinden Token girebilmek için)
-builder.Services.AddSignalR(); // SignalR servisini ekle
-// Hocanýn AnketPortal projesindeki gibi Repository ve Service kayýtlarý
+// 4. Servis Kayýtlarý
+builder.Services.AddSignalR();
 builder.Services.AddScoped(typeof(MassMessagingAPI.Repositories.IGenericRepository<>), typeof(MassMessagingAPI.Repositories.GenericRepository<>));
 builder.Services.AddScoped<MassMessagingAPI.Services.ITokenService, MassMessagingAPI.Services.TokenService>();
 builder.Services.AddControllers();
@@ -59,7 +56,6 @@ builder.Services.AddSwaggerGen(c =>
     c.SwaggerDoc("v1", new OpenApiInfo { Title = "Toplu Mesajlaþma API", Version = "v1" });
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
-        Description = "JWT Authorization header. Örnek kullaným: 'Bearer {token}'",
         Name = "Authorization",
         In = ParameterLocation.Header,
         Type = SecuritySchemeType.Http,
@@ -68,32 +64,25 @@ builder.Services.AddSwaggerGen(c =>
     c.AddSecurityRequirement(new OpenApiSecurityRequirement
     {
         {
-            new OpenApiSecurityScheme
-            {
-                Reference = new OpenApiReference
-                {
-                    Type = ReferenceType.SecurityScheme,
-                    Id = "Bearer"
-                }
-            },
+            new OpenApiSecurityScheme { Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "Bearer" } },
             Array.Empty<string>()
         }
     });
 });
 
-// 5. CORS Ayarlarý (SignalR ve UI'ýn engellenmemesi için)
+// 5. CORS Ayarlarý
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AllowAll",
-        b => b.AllowAnyMethod()
-              .AllowAnyHeader()
-              .AllowCredentials() // SignalR için þarttýr
-              .SetIsOriginAllowed(origin => true));
+    options.AddPolicy("AllowAll", b => b.AllowAnyMethod().AllowAnyHeader().AllowCredentials().SetIsOriginAllowed(origin => true));
 });
 
 var app = builder.Build();
 
-// HTTP Request Pipeline
+// --- MÝDDLEWARE SIRALAMASI (Burada app oluþturulduktan sonra çaðýrýyoruz) ---
+
+// Hata Yönetimi Middleware'i en baþa alýyoruz ki her hatayý yakalasýn
+app.UseMiddleware<MassMessagingAPI.Middlewares.ExceptionMiddleware>();
+
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -101,16 +90,14 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
-
-// MÝDDLEWARE SIRALAMASI KRÝTÝKTÝR!
 app.UseCors("AllowAll");
-app.UseAuthentication(); // 1. Sen kimsin? (Auth)
-app.UseAuthorization();  // 2. Yetkin var mý? (Role)
+app.UseAuthentication();
+app.UseAuthorization();
 
 app.MapControllers();
-app.MapHub<MassMessagingAPI.Hubs.ChatHub>("/chathub"); // Hub'ýn dýþarýya açýlacaðý adres
+app.MapHub<MassMessagingAPI.Hubs.ChatHub>("/chathub");
 
-// Uygulama baþlarken Rolleri ve Kurucu Admin'i otomatik oluþturur
+// Seed Data
 using (var scope = app.Services.CreateScope())
 {
     var services = scope.ServiceProvider;

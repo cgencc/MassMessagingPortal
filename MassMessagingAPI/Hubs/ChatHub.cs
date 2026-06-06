@@ -38,22 +38,30 @@ namespace MassMessagingAPI.Hubs // Kendi namespace'iniz
         {
             await Groups.RemoveFromGroupAsync(Context.ConnectionId, groupName);
         }
+        // Bağlı olan kullanıcıları tutan statik sözlük
+        private static readonly HashSet<string> ConnectedUsers = new HashSet<string>();
 
-        // Sisteme biri bağlandığında tetiklenir
         public override async Task OnConnectedAsync()
         {
-            var userId = Context.UserIdentifier; // Token'dan gelen ID
-                                                 // Burada veritabanında User tablosunda IsOnline = true yapabilirsin
-            await Clients.All.SendAsync("UserStatusChanged", userId, true);
+            var userId = Context.UserIdentifier;
+            if (userId != null)
+            {
+                ConnectedUsers.Add(userId);
+                await Clients.All.SendAsync("UserStatusChanged", userId, true);
+            }
             await base.OnConnectedAsync();
         }
-
 
         public override async Task OnDisconnectedAsync(Exception? exception)
         {
             var userId = Context.UserIdentifier;
-            await Clients.All.SendAsync("UserStatusChanged", userId, false);
+            if (userId != null)
+            {
+                ConnectedUsers.Remove(userId);
+                await Clients.All.SendAsync("UserStatusChanged", userId, false);
+            }
             await base.OnDisconnectedAsync(exception);
         }
+
     }
 }

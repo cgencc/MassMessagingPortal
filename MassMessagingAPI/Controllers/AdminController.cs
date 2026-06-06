@@ -42,7 +42,8 @@ namespace MassMessagingAPI.Controllers
             if (user == null) return NotFound();
 
             await _userManager.DeleteAsync(user);
-            return Ok(new { Message = "Kullanıcı silindi." });
+            return Ok(new { Message = "Kullanıcı başarıyla silindi." });
         }
+
     }
 }

@@ -17,5 +17,7 @@
         // Grup Mesajı ise Hangi Grup? (Birebir mesajsa burası NULL kalır)
         public int? GroupId { get; set; }
         public Group? Group { get; set; }
+
+        public bool IsRead { get; set; } = false;
     }
 }

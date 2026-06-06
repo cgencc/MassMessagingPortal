@@ -89,5 +89,16 @@ namespace MassMessagingAPI.Controllers
 
             return Ok(result);
         }
+        [HttpPut("mark-as-read/{messageId}")]
+        public async Task<IActionResult> MarkAsRead(int messageId)
+        {
+            var message = await _messageRepository.GetByIdAsync(messageId);
+            if (message == null) return NotFound();
+
+            message.IsRead = true;
+            await _messageRepository.UpdateAsync(message);
+
+            return Ok();
+        }
     }
 }
