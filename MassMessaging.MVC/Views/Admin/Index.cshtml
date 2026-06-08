@@ -67,7 +67,7 @@
                                 <div class="col-md-7">
                                     <h6 class="fw-bold text-dark mb-3">Sistemdeki Gruplar</h6>
                                     <ul id="groupListUI" class="list-group list-group-flush border rounded-3">
-                                        <li class="list-group-item text-muted">Yükleniyor...</li>
+                                        <li class="list-group-item text-muted text-center p-3">Yükleniyor...</li>
                                     </ul>
                                 </div>
                             </div>
@@ -85,10 +85,46 @@
         const token = localStorage.getItem("JWToken");
 
         document.addEventListener("DOMContentLoaded", () => {
-            if(!token) { window.location.href = "/Auth/Login"; return; }
+            // 1. Yetki Kontrolü (Token yoksa kov)
+            if(!token) {
+                window.location.href = "/Auth/Login";
+                return;
+            }
+
+            // 2. Sadece Admin Girebilir Koruması
+            try {
+                const base64Url = token.split('.')[1];
+                const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+                const jsonPayload = decodeURIComponent(window.atob(base64).split('').map(function(c) {
+                    return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+                }).join(''));
+
+                const payload = JSON.parse(jsonPayload);
+                const roleClaim = payload["http://schemas.microsoft.com/ws/2008/06/identity/claims/role"] || payload["role"];
+
+                if (roleClaim !== "Admin" && !(Array.isArray(roleClaim) && roleClaim.includes("Admin"))) {
+                    alert("Bu sayfaya erişim yetkiniz yok!");
+                    window.location.href = "/Home/Index";
+                    return;
+                }
+            } catch (e) {
+                window.location.href = "/Auth/Login";
+                return;
+            }
+
+            // 3. Verileri Yükle
             loadUsers();
             loadGroups();
         });
+
+        // XSS Koruması (HTML sızmalarını engeller)
+        function escapeHtml(str) {
+            return String(str)
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;");
+        }
 
         async function loadUsers() {
             try {
@@ -96,15 +132,24 @@
                 if (response.ok) {
                     const users = await response.json();
                     let html = "";
-                    users.forEach(u => html += `
-                        <tr>
-                            <td><div class="fw-bold">${u.firstName} ${u.lastName}</div></td>
-                            <td class="text-muted">${u.email}</td>
-                            <td class="text-center"><span class="badge bg-success-subtle text-success rounded-pill px-3">Aktif</span></td>
-                        </tr>`);
+
+                    if(users.length === 0) {
+                        html = `<tr><td colspan="3" class="text-center text-muted p-4">Kayıtlı kullanıcı bulunamadı.</td></tr>`;
+                    } else {
+                        users.forEach(u => html += `
+                            <tr>
+                                <td><div class="fw-bold">${escapeHtml(u.firstName)} ${escapeHtml(u.lastName)}</div></td>
+                                <td class="text-muted">${escapeHtml(u.email)}</td>
+                                <td class="text-center"><span class="badge bg-success-subtle text-success rounded-pill px-3">Aktif</span></td>
+                            </tr>`);
+                    }
                     document.getElementById("usersTableBody").innerHTML = html;
+                } else {
+                    document.getElementById("usersTableBody").innerHTML = `<tr><td colspan="3" class="text-center text-danger p-4">Kullanıcılar yüklenemedi.</td></tr>`;
                 }
-            } catch (error) { console.error(error); }
+            } catch (error) {
+                console.error(error);
+            }
         }
 
         async function loadGroups() {
@@ -115,31 +160,47 @@
                     let html = "";
                     groups.forEach(g => html += `
                         <li class="list-group-item d-flex justify-content-between align-items-center py-3">
-                            <span class="fw-medium">${g.name}</span>
-                            <span class="badge bg-dark rounded-pill">${g.id}</span>
+                            <span class="fw-medium">${escapeHtml(g.name)}</span>
+                            <span class="badge bg-dark rounded-pill">ID: ${g.id}</span>
                         </li>`);
-                    document.getElementById("groupListUI").innerHTML = html || "<li class='list-group-item text-muted'>Grup bulunamadı.</li>";
+                    document.getElementById("groupListUI").innerHTML = html || "<li class='list-group-item text-muted text-center p-3'>Henüz grup oluşturulmamış.</li>";
                 }
-            } catch(error) { console.error(error); }
+            } catch(error) {
+                console.error(error);
+            }
         }
 
         async function createGroup() {
             const input = document.getElementById("newGroupName");
-            if(!input.value) return alert("Lütfen bir grup adı girin!");
+            const groupName = input.value.trim();
 
-            const res = await fetch(`${API_BASE}/Group/create`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
-                body: JSON.stringify(input.value)
-            });
+            if(!groupName) {
+                return alert("Lütfen bir grup adı girin!");
+            }
 
-            if(res.ok) {
+            try {
+                const res = await fetch(`${API_BASE}/Group/create`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+                    // DÜZELTME: API'nin beklediği DTO objesini gönderiyoruz
+                    body: JSON.stringify({ name: groupName })
+                });
+
                 const resDiv = document.getElementById("groupResult");
-                resDiv.className = "mt-2 small fw-bold text-success";
-                resDiv.innerText = "Grup başarıyla oluşturuldu!";
-                input.value = "";
-                loadGroups();
+
+                if(res.ok) {
+                    resDiv.className = "mt-2 small fw-bold text-success";
+                    resDiv.innerText = "Grup başarıyla oluşturuldu!";
+                    input.value = "";
+                    loadGroups(); // Gruplar listesini otomatik tazele
+                } else {
+                    resDiv.className = "mt-2 small fw-bold text-danger";
+                    resDiv.innerText = "Grup oluşturulurken hata oluştu.";
+                }
+
                 setTimeout(() => resDiv.innerText = "", 3000);
+            } catch(e) {
+                console.error("Grup oluşturma hatası:", e);
             }
         }
     </script>
