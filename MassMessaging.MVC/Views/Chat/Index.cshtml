@@ -52,12 +52,10 @@
     <script>
         const API_BASE = "https://localhost:7124/api";
         const token = localStorage.getItem("JWToken");
-        let activeId = null;
-        let isGroup = false;
+        let activeId = null; let isGroup = false;
 
         document.addEventListener("DOMContentLoaded", loadLists);
 
-        // 1. Liste Yükleme
         async function loadLists() {
             const list = document.getElementById("chatList");
             const [uRes, gRes] = await Promise.all([
@@ -66,13 +64,11 @@
             ]);
             const users = await uRes.json();
             const groups = await gRes.json();
-
             list.innerHTML = "";
             users.forEach(u => list.innerHTML += `<div class="chat-list-item" onclick="startChat('${u.id}', false, this)">👤 ${u.fullName}</div>`);
             groups.forEach(g => list.innerHTML += `<div class="chat-list-item" onclick="startChat('${g.id}', true, this)">👥 ${g.name}</div>`);
         }
 
-        // 2. Sohbet Başlat
         function startChat(id, group, element) {
             activeId = id; isGroup = group;
             document.querySelectorAll('.chat-list-item').forEach(el => el.classList.remove('active-chat'));
@@ -80,7 +76,6 @@
             loadHistory(id);
         }
 
-        // 3. Mesaj Geçmişi
         async function loadHistory(id) {
             const chatBox = document.getElementById("chatBox");
             chatBox.innerHTML = '<div class="text-center text-muted">Yükleniyor...</div>';
@@ -90,7 +85,6 @@
             msgs.forEach(m => renderMessage(m.senderName, m.content, m.isMine));
         }
 
-        // 4. Render
         function renderMessage(name, content, isMine) {
             const chatBox = document.getElementById("chatBox");
             chatBox.innerHTML += `<div class="p-2 rounded ${isMine ? 'msg-me' : 'msg-other'}" style="max-width:70%; border:1px solid #ccc;">
@@ -98,15 +92,19 @@
             chatBox.scrollTop = chatBox.scrollHeight;
         }
 
-        // 5. Mesaj Gönderimi
         async function sendMessage(content = null) {
             const text = content || document.getElementById("messageInput").value;
             if(!text || !activeId) return;
 
+            const payload = {
+                content: text,
+                [isGroup ? 'groupId' : 'receiverId']: isGroup ? parseInt(activeId) : activeId
+            };
+
             const res = await fetch(`${API_BASE}/Message/send`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
-                body: JSON.stringify({ content: text, [isGroup ? 'groupId' : 'receiverId']: isGroup ? parseInt(activeId) : activeId })
+                body: JSON.stringify(payload)
             });
 
             if(res.ok) {
@@ -115,23 +113,27 @@
             }
         }
 
-        // 6. Medya Yükleme
         async function handleFileSelect(e) {
             const formData = new FormData();
             formData.append("file", e.target.files[0]);
-            const res = await fetch(`${API_BASE}/Message/upload-file`, { method: "POST", body: formData });
+            // TOKEN EKLEDİK:
+            const res = await fetch(`${API_BASE}/Message/upload-file`, {
+                method: "POST",
+                headers: { "Authorization": `Bearer ${token}` },
+                body: formData
+            });
             const data = await res.json();
             sendMessage(`<img src="${data.url}" style="max-width:150px;">`);
         }
 
-        // 7. Kamera
         async function startCamera() {
-            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-            const video = document.createElement("video");
-            video.srcObject = stream;
-            video.play();
-            // Burada snapshot alıp sendMessage ile yollayabilirsin
-            alert("Kamera izni alındı, video elementini modal olarak ekleyebilirsin.");
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                const video = document.createElement("video");
+                video.srcObject = stream;
+                video.play();
+                alert("Kamera hazır! (Snapshot için video elementini ekrana gömmelisin)");
+            } catch(e) { alert("Kamera izni reddedildi!"); }
         }
     </script>
 }

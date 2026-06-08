@@ -103,9 +103,14 @@ namespace MassMessagingAPI.Controllers
         [HttpPost("upload-file")]
         public async Task<IActionResult> UploadFile(IFormFile file)
         {
-            if (file == null || file.Length == 0) return BadRequest("Dosya seçilmedi.");
+            if (file == null || file.Length == 0) return BadRequest("Dosya yok.");
 
-            var fileName = Guid.NewGuid().ToString() + Path.GetExtension(file.FileName);
+            // Güvenlik: Sadece resim ve video izinleri
+            var allowedExtensions = new[] { ".jpg", ".png", ".mp4", ".pdf" };
+            var ext = Path.GetExtension(file.FileName).ToLower();
+            if (!allowedExtensions.Contains(ext)) return BadRequest("Desteklenmeyen dosya tipi.");
+
+            var fileName = Guid.NewGuid().ToString() + ext;
             var path = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot/uploads", fileName);
 
             using (var stream = new FileStream(path, FileMode.Create))
@@ -122,5 +127,6 @@ namespace MassMessagingAPI.Controllers
             await _hubContext.Clients.All.SendAsync("ReceiveAdminMessage", content);
             return Ok();
         }
+
     }
 }
