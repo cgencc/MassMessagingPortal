@@ -96,5 +96,32 @@ namespace MassMessagingAPI.Controllers
 
             return Ok(result);
         }
+        // DTO Sınıfını dosyanın en üstüne veya DTOs klasörüne ekle
+        public class BulkAddUsersDto
+        {
+            public int GroupId { get; set; }
+            public List<string> UserIds { get; set; } = new List<string>();
+        }
+
+        // GroupController içine bu metodu ekle
+        [HttpPost("add-users-bulk")]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> AddUsersToGroup([FromBody] BulkAddUsersDto dto)
+        {
+            var group = await _groupRepository.GetByIdAsync(dto.GroupId);
+            if (group == null) return NotFound("Grup bulunamadı.");
+
+            int addedCount = 0;
+            foreach (var userId in dto.UserIds)
+            {
+                var exists = await _userGroupRepository.FindAsync(ug => ug.UserId == userId && ug.GroupId == dto.GroupId);
+                if (!exists.Any())
+                {
+                    await _userGroupRepository.AddAsync(new UserGroup { UserId = userId, GroupId = dto.GroupId });
+                    addedCount++;
+                }
+            }
+            return Ok(new { Message = $"{addedCount} kullanıcı gruba eklendi." });
+        }
     }
 }

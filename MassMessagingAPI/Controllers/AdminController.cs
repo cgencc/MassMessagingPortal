@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Security.Claims; // ClaimTypes için gerekli
 
 namespace MassMessagingAPI.Controllers
 {
@@ -23,6 +24,9 @@ namespace MassMessagingAPI.Controllers
             _context = context;
         }
 
+        // Helper: İşlemi yapan adminin ID'sini almak
+        private string GetCurrentUserId() => User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
         [HttpGet("users")]
         public async Task<IActionResult> GetAllUsers()
         {
@@ -38,10 +42,9 @@ namespace MassMessagingAPI.Controllers
                     user.FirstName,
                     user.LastName,
                     user.Email,
-                    Roles = roles // Rollere buradan erişiyoruz
+                    Roles = roles
                 });
             }
-
             return Ok(userList);
         }
 
@@ -49,34 +52,63 @@ namespace MassMessagingAPI.Controllers
         public async Task<IActionResult> AssignRole(string userId, string role)
         {
             var user = await _userManager.FindByIdAsync(userId);
-            if (user == null) return NotFound();
-            if (!await _roleManager.RoleExistsAsync(role)) await _roleManager.CreateAsync(new IdentityRole(role));
-            await _userManager.AddToRoleAsync(user, role);
-            return Ok();
+            if (user == null) return NotFound("Kullanıcı bulunamadı.");
+
+            if (!await _roleManager.RoleExistsAsync(role))
+                return BadRequest("Böyle bir rol bulunmuyor.");
+
+            if (await _userManager.IsInRoleAsync(user, role))
+                return BadRequest("Kullanıcı zaten bu role sahip.");
+
+            var result = await _userManager.AddToRoleAsync(user, role);
+            if (!result.Succeeded) return BadRequest(result.Errors);
+
+            return Ok(new { Message = "Rol başarıyla atandı." });
         }
 
         [HttpPost("remove-role/{userId}/{role}")]
         public async Task<IActionResult> RemoveRole(string userId, string role)
         {
+            var currentUserId = GetCurrentUserId();
+
+            // GÜVENLİK KONTROLÜ: Admin kendi yetkisini kaldıramaz
+            if (userId == currentUserId)
+                return BadRequest("Kendi yetkilerini kaldıramazsın.");
+
             var user = await _userManager.FindByIdAsync(userId);
-            if (user == null) return NotFound();
-            await _userManager.RemoveFromRoleAsync(user, role);
-            return Ok();
+            if (user == null) return NotFound("Kullanıcı bulunamadı.");
+
+            if (!await _userManager.IsInRoleAsync(user, role))
+                return BadRequest("Kullanıcı bu role sahip değil.");
+
+            var result = await _userManager.RemoveFromRoleAsync(user, role);
+            if (!result.Succeeded) return BadRequest(result.Errors);
+
+            return Ok(new { Message = "Rol başarıyla kaldırıldı." });
         }
 
         [HttpDelete("delete-user/{id}")]
         public async Task<IActionResult> DeleteUser(string id)
         {
-            var user = await _userManager.FindByIdAsync(id);
-            if (user == null) return NotFound();
+            var currentUserId = GetCurrentUserId();
 
-            // Önce kullanıcının attığı mesajları temizle (FK Hatası almamak için)
+            // GÜVENLİK KONTROLÜ: Admin kendini silemez
+            if (id == currentUserId)
+                return BadRequest("Kendini silemezsin.");
+
+            var user = await _userManager.FindByIdAsync(id);
+            if (user == null) return NotFound("Kullanıcı bulunamadı.");
+
+            // Kullanıcı ile ilgili verileri temizle
             var messages = _context.Messages.Where(m => m.SenderId == id || m.ReceiverId == id);
             _context.Messages.RemoveRange(messages);
             await _context.SaveChangesAsync();
 
-            await _userManager.DeleteAsync(user);
-            return Ok();
+            var result = await _userManager.DeleteAsync(user);
+            if (!result.Succeeded) return BadRequest(result.Errors);
+
+            return Ok(new { Message = "Kullanıcı silindi." });
         }
+
     }
 }
