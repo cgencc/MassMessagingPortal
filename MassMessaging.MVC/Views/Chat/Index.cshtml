@@ -102,10 +102,7 @@
             <button class="btn btn-outline-secondary btn-sm" onclick="startCamera()" title="Kamera">
                 <i class="fa-solid fa-camera"></i>
             </button>
-
-            <input type="text" id="messageInput" class="form-control rounded-pill"
-                   placeholder="Bir şeyler yazın..."
-                   onkeydown="if(event.key==='Enter') sendMessage()">
+            <input type="text" id="messageInput" class="form-control rounded-pill" placeholder="Bir şeyler yazın..." onkeydown="if(event.key==='Enter') sendMessage()">
             <button onclick="sendMessage()" class="btn btn-primary rounded-pill px-4">
                 Gönder <i class="fa-solid fa-paper-plane ms-1"></i>
             </button>
@@ -116,51 +113,40 @@
 @section Scripts {
     <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.0/signalr.min.js"></script>
     <script>
+        // --- Sabitler ---
         const API_BASE = "https://localhost:7124/api";
         const HUB_URL = "https://localhost:7124/chatHub";
         const token = localStorage.getItem("JWToken");
 
-        // GLOBAL DEĞİŞKENLER (Hata vermemesi için en üstte tanımlı)
+        // --- Global Değişkenler ---
         let activeId = null;
         let isGroup = false;
         let activeName = "";
         let connection = null;
         let typingTimer;
 
-        // 1. Yetki Kontrolü
-        if (!token) {
-            window.location.href = "/Auth/Login";
-        }
+        // --- Başlatma İşlemleri ---
+        if (!token) window.location.href = "/Auth/Login";
 
-        // 2. DOM Yüklendiğinde Başlat
         document.addEventListener("DOMContentLoaded", async () => {
-            if(token) {
-                await initApp();
-            }
+            if (token) await initApp();
         });
 
         async function initApp() {
-            // SignalR bağlantısını kur
             connection = new signalR.HubConnectionBuilder()
                 .withUrl(HUB_URL, { accessTokenFactory: () => token })
                 .withAutomaticReconnect()
                 .build();
 
-            // Gelen mesajları dinle
-            connection.on("ReceiveMessage", (senderId, senderName, content) => {
-                if (!isGroup && activeId === senderId) {
-                    renderMessage(senderName, content, false);
-                } else {
-                    showToast(`📩 ${senderName}: ${content}`);
-                }
+            // Hub Dinleyicileri
+            connection.on("ReceiveMessage", (sId, sName, content) => {
+                if (!isGroup && activeId === sId) renderMessage(sName, content, false);
+                else showToast(`📩 ${sName}: ${content}`);
             });
 
-            connection.on("ReceiveGroupMessage", (groupName, senderName, content) => {
-                if (isGroup && activeName === groupName) {
-                    renderMessage(senderName, content, false);
-                } else {
-                    showToast(`👥 [${groupName}] ${senderName}: ${content}`);
-                }
+            connection.on("ReceiveGroupMessage", (gName, sName, content) => {
+                if (isGroup && activeName === gName) renderMessage(sName, content, false);
+                else showToast(`👥 [${gName}] ${sName}: ${content}`);
             });
 
             connection.on("ReceiveAdminMessage", (content) => {
@@ -179,24 +165,20 @@
                 }
             });
 
-            // Başlat
             try {
                 await connection.start();
-                console.log("SignalR bağlandı.");
-                await loadLists(); // Listeleri yükle
-            } catch (err) {
-                console.error("SignalR hatası:", err);
-            }
+                await loadLists();
+            } catch (err) { console.error("SignalR hatası:", err); }
         }
 
-        // 3. Yazıyor durumu tetikleyici
+        // --- Yazıyor Durumu Tetikleyici ---
         document.getElementById("messageInput").addEventListener("input", () => {
-            if(activeId && connection && connection.state === signalR.HubConnectionState.Connected) {
-                connection.invoke("SendTypingStatus", activeId, isGroup).catch(err => console.error(err));
+            if (activeId && connection && connection.state === signalR.HubConnectionState.Connected) {
+                connection.invoke("SendTypingStatus", activeId, isGroup).catch(console.error);
             }
         });
 
-        // 4. Liste Yükleme
+        // --- Liste Yükleme ---
         async function loadLists() {
             const list = document.getElementById("chatList");
             list.innerHTML = `<div class="text-center p-3"><div class="spinner-border spinner-border-sm text-primary"></div></div>`;
@@ -206,56 +188,34 @@
                     fetch(`${API_BASE}/User/list`, { headers: { "Authorization": `Bearer ${token}` } }),
                     fetch(`${API_BASE}/Group/list`, { headers: { "Authorization": `Bearer ${token}` } })
                 ]);
-
                 const users = uRes.ok ? await uRes.json() : [];
                 const groups = gRes.ok ? await gRes.json() : [];
 
                 list.innerHTML = "";
-
                 if (users.length > 0) {
                     list.innerHTML += `<div class="px-3 pt-3 pb-1 text-uppercase text-muted" style="font-size:10px;font-weight:700;">Kullanıcılar</div>`;
-                    users.forEach(u => {
-                        const name = u.fullName || "Kullanıcı";
-                        list.innerHTML += `
-                            <div class="chat-list-item" onclick="startChat('${u.id}', false, this, '${escapeHtml(name)}')">
-                                👤 ${escapeHtml(name)}
-                            </div>`;
-                    });
+                    users.forEach(u => list.innerHTML += `<div class="chat-list-item" onclick="startChat('${u.id}', false, this, '${escapeHtml(u.fullName)}')">👤 ${escapeHtml(u.fullName)}</div>`);
                 }
-
                 if (groups.length > 0) {
                     list.innerHTML += `<div class="px-3 pt-3 pb-1 text-uppercase text-muted" style="font-size:10px;font-weight:700;">Gruplar</div>`;
-                    groups.forEach(g => {
-                        const name = g.name || "Grup";
-                        list.innerHTML += `
-                            <div class="chat-list-item" onclick="startChat('${g.id}', true, this, '${escapeHtml(name)}')">
-                                👥 ${escapeHtml(name)}
-                            </div>`;
-                    });
+                    groups.forEach(g => list.innerHTML += `<div class="chat-list-item" onclick="startChat('${g.id}', true, this, '${escapeHtml(g.name)}')">👥 ${escapeHtml(g.name)}</div>`);
                 }
-            } catch(e) {
-                list.innerHTML = `<div class="p-3 text-danger small">Listeler yüklenemedi.</div>`;
-            }
+            } catch(e) { list.innerHTML = `<div class="p-3 text-danger small">Listeler yüklenemedi.</div>`; }
         }
 
-        // 5. Sohbeti Başlat
+        // --- Sohbet Başlat ---
         function startChat(id, group, element, name) {
-            activeId = id;
-            isGroup = group;
-            activeName = name;
-
+            activeId = id; isGroup = group; activeName = name;
             document.querySelectorAll('.chat-list-item').forEach(el => el.classList.remove('active-chat'));
             if(element) element.classList.add('active-chat');
-
             document.getElementById("chatHeader").innerText = name;
             loadHistory(id);
         }
 
-        // 6. Geçmişi Yükle
+        // --- Mesaj Geçmişi ---
         async function loadHistory(id) {
             const chatBox = document.getElementById("chatBox");
             chatBox.innerHTML = '<div class="text-center p-3 text-muted">Yükleniyor...</div>';
-
             try {
                 const res = await fetch(`${API_BASE}/Message/history/${id}`, { headers: { "Authorization": `Bearer ${token}` } });
                 const msgs = await res.json();
@@ -264,7 +224,7 @@
             } catch(e) { chatBox.innerHTML = '<div class="text-center p-3 text-danger">Hata!</div>'; }
         }
 
-        // 7. Mesajı Çiz
+        // --- Mesaj Çizim ---
         function renderMessage(name, content, isMine, sentDate = null) {
             const chatBox = document.getElementById("chatBox");
             const empty = document.getElementById("chatEmptyState");
@@ -280,7 +240,7 @@
             chatBox.scrollTop = chatBox.scrollHeight;
         }
 
-        // 8. Gönder
+        // --- Mesaj Gönder ---
         async function sendMessage(contentOverride = null) {
             const text = contentOverride || document.getElementById("messageInput").value.trim();
             if(!text || !activeId) return;
@@ -297,7 +257,7 @@
             }
         }
 
-        // 9. Medya
+        // --- Dosya Yükleme ---
         async function handleFileSelect(e) {
             const file = e.target.files[0];
             const formData = new FormData(); formData.append("file", file);
@@ -306,19 +266,14 @@
             sendMessage(`<img src="https://localhost:7124${data.url}" style="max-width:200px; border-radius:8px;">`);
         }
 
-        function startCamera() {
-            alert("Kamera hazır!");
-        }
+        function startCamera() { alert("Kamera özelliği geliştiriliyor!"); }
 
-        // 10. Yardımcı
-        function escapeHtml(str) {
-            return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-        }
-
-        function showToast(message) {
+        // --- Yardımcılar ---
+        function escapeHtml(str) { return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }
+        function showToast(msg) {
             const toast = document.createElement("div");
             toast.style.cssText = "position:fixed; bottom:20px; right:20px; background:#333; color:#fff; padding:10px 16px; border-radius:8px;";
-            toast.textContent = message;
+            toast.textContent = msg;
             document.body.appendChild(toast);
             setTimeout(() => toast.remove(), 3000);
         }

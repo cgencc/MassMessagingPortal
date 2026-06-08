@@ -1,10 +1,12 @@
-﻿using MassMessagingAPI.DTOs;
+﻿using MassMessagingAPI.Data; // AppDbContext için bu şart
+using MassMessagingAPI.DTOs;
 using MassMessagingAPI.Hubs;
 using MassMessagingAPI.Models;
 using MassMessagingAPI.Repositories;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
+using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
 
 namespace MassMessagingAPI.Controllers
@@ -17,15 +19,18 @@ namespace MassMessagingAPI.Controllers
         private readonly IGenericRepository<Message> _messageRepository;
         private readonly IGenericRepository<Group> _groupRepository;
         private readonly IHubContext<ChatHub> _hubContext;
+        private readonly AppDbContext _context; // <-- BURAYA EKLENDİ
 
         public MessageController(
             IGenericRepository<Message> messageRepository,
             IGenericRepository<Group> groupRepository,
-            IHubContext<ChatHub> hubContext)
+            IHubContext<ChatHub> hubContext,
+            AppDbContext context) // <-- CONSTRUCTOR'A EKLENDİ
         {
             _messageRepository = messageRepository;
             _groupRepository = groupRepository;
             _hubContext = hubContext;
+            _context = context; // <-- ATAMA YAPILDI
         }
 
         [HttpPost("send")]
@@ -65,32 +70,29 @@ namespace MassMessagingAPI.Controllers
             return Ok(new { Message = "Mesaj gönderildi." });
         }
 
-        // Direct message history between two users
-        [HttpGet("history/{userId}")]
-        public async Task<IActionResult> GetMessageHistory(string userId)
+        [HttpGet("history/{id}/{page}")]
+        public async Task<IActionResult> GetHistory(int id, int page = 1)
         {
-            var myId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            int pageSize = 20;
 
-            var messages = await _messageRepository.FindAsync(
-                m => (m.SenderId == myId && m.ReceiverId == userId) ||
-                     (m.SenderId == userId && m.ReceiverId == myId),
-                m => m.Sender!);
-
-            var result = messages
+            var messages = await _context.Messages
+                .Where(m => m.GroupId == id)
+                .OrderByDescending(m => m.SentDate)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
                 .OrderBy(m => m.SentDate)
-                .Select(m => new
-                {
+                .Select(m => new {
                     m.Id,
                     m.Content,
                     m.SentDate,
-                    SenderName = m.Sender!.FirstName + " " + m.Sender.LastName,
-                    IsMine = m.SenderId == myId
-                });
+                    SenderName = m.Sender.FirstName + " " + m.Sender.LastName,
+                    IsMine = m.SenderId == User.FindFirst(ClaimTypes.NameIdentifier).Value
+                })
+                .ToListAsync();
 
-            return Ok(result);
+            return Ok(messages);
         }
 
-        // FIX (Chat UI): Group message history — was missing, caused chat box to be empty for groups
         [HttpGet("history/group/{groupId}")]
         public async Task<IActionResult> GetGroupMessageHistory(int groupId)
         {

@@ -1,4 +1,5 @@
 ﻿using MassMessagingAPI.Data; // AppDbContext için gerekli
+using MassMessagingAPI.DTOs;
 using MassMessagingAPI.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
@@ -54,6 +55,22 @@ namespace MassMessagingAPI.Controllers
                 user.LastName,
                 user.Email
             });
+        }
+        [HttpPut("update-profile")]
+        [Authorize]
+        public async Task<IActionResult> UpdateProfile([FromBody] UpdateProfileDto dto)
+        {
+            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            var user = await _userManager.FindByIdAsync(userId);
+
+            if (user == null) return NotFound("Kullanıcı bulunamadı.");
+
+            user.FirstName = dto.FirstName;
+            user.LastName = dto.LastName;
+            user.Email = dto.Email;
+
+            await _userManager.UpdateAsync(user);
+            return Ok(new { message = "Profil başarıyla güncellendi." });
         }
     }
 }

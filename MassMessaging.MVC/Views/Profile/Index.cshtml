@@ -10,20 +10,26 @@
                     <div class="mb-4">
                         <i class="fa-solid fa-circle-user fa-5x text-primary"></i>
                     </div>
+
                     <h4 class="fw-bold" id="userName">Yükleniyor...</h4>
                     <p class="text-muted" id="userEmail"></p>
 
-                    <hr>
+                    <hr class="my-4">
 
                     <div class="text-start mt-4">
-                        <label class="small text-muted fw-bold">Ad Soyad</label>
-                        <input type="text" id="fullNameDisplay" class="form-control mb-3" readonly>
-
-                        <label class="small text-muted fw-bold">E-posta</label>
-                        <input type="text" id="emailDisplay" class="form-control mb-3" readonly>
+                        <div class="mb-3">
+                            <label class="small text-muted fw-bold text-uppercase">Ad Soyad</label>
+                            <input type="text" id="fullNameDisplay" class="form-control" readonly>
+                        </div>
+                        <div class="mb-3">
+                            <label class="small text-muted fw-bold text-uppercase">E-posta</label>
+                            <input type="text" id="emailDisplay" class="form-control" readonly>
+                        </div>
                     </div>
 
-                    <a href="/Chat/Index" class="btn btn-outline-primary w-100 mt-3">Sohbetlere Dön</a>
+                    <div class="d-grid gap-2 mt-4">
+                        <a href="/Chat/Index" class="btn btn-primary">Sohbetlere Dön</a>
+                    </div>
                 </div>
             </div>
         </div>
@@ -36,23 +42,35 @@
         const token = localStorage.getItem("JWToken");
 
         document.addEventListener("DOMContentLoaded", async () => {
-            if(!token) window.location.href = "/Auth/Login";
+            if (!token) {
+                window.location.href = "/Auth/Login";
+                return;
+            }
+            await loadProfile();
+        });
 
+        // Profil verilerini çek ve ekrana bas
+        async function loadProfile() {
             try {
-                const res = await fetch(`${API_BASE}/User/profile`, {
+                const response = await fetch(`${API_BASE}/User/profile`, {
                     headers: { "Authorization": `Bearer ${token}` }
                 });
 
-                if(res.ok) {
-                    const user = await res.json();
-                    document.getElementById("userName").innerText = user.firstName + " " + user.lastName;
+                if (response.ok) {
+                    const user = await response.json();
+
+                    // Verileri yerleştir
+                    document.getElementById("userName").innerText = `${user.firstName} ${user.lastName}`;
                     document.getElementById("userEmail").innerText = user.email;
-                    document.getElementById("fullNameDisplay").value = user.firstName + " " + user.lastName;
+                    document.getElementById("fullNameDisplay").value = `${user.firstName} ${user.lastName}`;
                     document.getElementById("emailDisplay").value = user.email;
+                } else {
+                    console.error("Profil verisi çekilemedi.");
                 }
-            } catch(e) {
-                console.error("Profil yüklenemedi:", e);
+            } catch (e) {
+                console.error("Hata:", e);
+                document.getElementById("userName").innerText = "Hata oluştu!";
             }
-        });
+        }
     </script>
 }
