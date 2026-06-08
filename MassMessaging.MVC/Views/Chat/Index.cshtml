@@ -7,7 +7,7 @@
         cursor: pointer;
         padding: 15px;
         border-bottom: 1px solid #eee;
-        transition: 0.3s;
+        transition: 0.2s;
     }
 
         .chat-list-item:hover, .active-chat {
@@ -15,34 +15,102 @@
             border-left: 5px solid #0d6efd;
         }
 
+    /* FIX: chatBox must be a flex column so align-self works on bubbles */
+    #chatBox {
+        display: flex;
+        flex-direction: column;
+        overflow-y: auto;
+        background: #e5ddd5;
+        gap: 8px;
+        flex-grow: 1;
+        padding: 12px;
+    }
+
+    .msg-bubble {
+        max-width: 70%;
+        padding: 8px 12px;
+        border-radius: 12px;
+        word-break: break-word;
+        font-size: 0.92rem;
+    }
+
     .msg-me {
         background-color: #d1e7dd;
         align-self: flex-end;
+        border-bottom-right-radius: 2px;
     }
 
     .msg-other {
         background-color: #ffffff;
         align-self: flex-start;
+        border-bottom-left-radius: 2px;
+        border: 1px solid #ddd;
+    }
+
+    .msg-bubble .msg-sender {
+        font-size: 10px;
+        color: #555;
+        display: block;
+        margin-bottom: 2px;
+        font-weight: 600;
+    }
+
+    .msg-bubble .msg-time {
+        font-size: 9px;
+        color: #888;
+        display: block;
+        text-align: right;
+        margin-top: 3px;
+    }
+
+    #chatEmptyState {
+        color: #aaa;
+        text-align: center;
+        margin: auto;
+        font-size: 0.9rem;
     }
 </style>
 
 <div class="row g-0 mt-3" style="height: 85vh;">
-    <div class="col-md-3 border-end bg-white">
-        <div class="p-3 border-bottom bg-light fw-bold">Sohbetler</div>
-        <div id="chatList" style="overflow-y:auto; height:100%;"></div>
+    <!-- Left Panel: contact/group list -->
+    <div class="col-md-3 border-end bg-white d-flex flex-column">
+        <div class="p-3 border-bottom bg-light fw-bold">
+            <i class="fa-solid fa-comments text-primary me-2"></i>Sohbetler
+        </div>
+        <div id="chatList" style="overflow-y:auto; flex:1;"></div>
     </div>
 
+    <!-- Right Panel: chat area -->
     <div class="col-md-9 d-flex flex-column bg-white">
-        <div id="adminPin" class="alert alert-warning m-0" style="display:none; border-radius:0;"></div>
-        <div id="chatBox" class="flex-grow-1 p-3 d-flex flex-column" style="overflow-y:auto; background: #e5ddd5; gap: 10px;"></div>
+        <!-- Admin broadcast pin -->
+        <div id="adminPin" class="alert alert-warning m-0 py-2 px-3" style="display:none; border-radius:0; font-size:0.85rem;"></div>
 
-        <div class="p-2 border-top bg-light d-flex align-items-center">
-            <input type="file" id="mediaInput" accept="image/*,video/*" style="display:none" onchange="handleFileSelect(event)">
-            <button class="btn btn-outline-secondary btn-sm" onclick="document.getElementById('mediaInput').click()">📎</button>
-            <button class="btn btn-outline-secondary btn-sm ms-2" onclick="startCamera()">📷</button>
+        <!-- Chat header -->
+        <div id="chatHeader" class="p-3 border-bottom bg-light fw-semibold text-muted" style="font-size:0.9rem;">
+            Bir sohbet seçin
+        </div>
 
-            <input type="text" id="messageInput" class="form-control mx-2 rounded-pill" placeholder="Bir şeyler yazın...">
-            <button onclick="sendMessage()" class="btn btn-primary rounded-pill">Gönder 🚀</button>
+        <!-- Messages -->
+        <div id="chatBox">
+            <div id="chatEmptyState">
+                <i class="fa-solid fa-comments fa-2x mb-2 d-block"></i>
+                Mesajlaşmak için soldaki listeden birini seçin
+            </div>
+        </div>
+
+        <!-- Input area -->
+        <div class="p-2 border-top bg-light d-flex align-items-center gap-2">
+            <input type="file" id="mediaInput" accept="image/*,video/*,.pdf" style="display:none" onchange="handleFileSelect(event)">
+            <button class="btn btn-outline-secondary btn-sm" onclick="document.getElementById('mediaInput').click()" title="Dosya ekle">
+                <i class="fa-solid fa-paperclip"></i>
+            </button>
+
+            <input type="text" id="messageInput" class="form-control rounded-pill"
+                   placeholder="Bir şeyler yazın..."
+                   onkeydown="if(event.key==='Enter') sendMessage()">
+            <button onclick="sendMessage()" class="btn btn-primary rounded-pill px-4">
+                Gönder <i class="fa-solid fa-paper-plane ms-1"></i>
+            </button>
         </div>
     </div>
 </div>
@@ -50,90 +118,276 @@
 @section Scripts {
     <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.0/signalr.min.js"></script>
     <script>
-        const API_BASE = "https://localhost:7124/api";
-        const token = localStorage.getItem("JWToken");
-        let activeId = null; let isGroup = false;
+        const API_BASE   = "https://localhost:7124/api";
+        const HUB_URL    = "https://localhost:7124/chatHub";
+        const token      = localStorage.getItem("JWToken");
 
-        document.addEventListener("DOMContentLoaded", loadLists);
+        // FIX #5: Redirect to login if no token
+        if (!token) { window.location.href = "/Auth/Login"; }
 
+        let activeId   = null;
+        let isGroup    = false;
+        let activeName = "";
+
+        // ── SignalR connection ────────────────────────────────────────────────────
+        const connection = new signalR.HubConnectionBuilder()
+            .withUrl(HUB_URL, { accessTokenFactory: () => token })
+            .withAutomaticReconnect()
+            .build();
+
+        // Incoming DM
+        connection.on("ReceiveMessage", (senderId, senderName, content) => {
+            // Only show inline if this chat is currently open
+            if (!isGroup && activeId === senderId) {
+                renderMessage(senderName, content, false);
+            } else {
+                showToast(`📩 ${senderName}: ${content}`);
+            }
+        });
+
+        // Incoming group message
+        connection.on("ReceiveGroupMessage", (groupName, senderName, content) => {
+            if (isGroup && activeName === groupName) {
+                renderMessage(senderName, content, false);
+            } else {
+                showToast(`👥 [${groupName}] ${senderName}: ${content}`);
+            }
+        });
+
+        // Admin broadcast
+        connection.on("ReceiveAdminMessage", (content) => {
+            const pin = document.getElementById("adminPin");
+            pin.innerHTML = `<i class='fa-solid fa-bullhorn me-2'></i><strong>Yönetici Duyurusu:</strong> ${content}`;
+            pin.style.display = "block";
+        });
+
+        // Online status
+        connection.on("UserStatusChanged", (userId, isOnline) => {
+            const el = document.querySelector(`[data-uid="${userId}"] .status-dot`);
+            if (el) {
+                el.style.backgroundColor = isOnline ? "#22c55e" : "#d1d5db";
+                el.title = isOnline ? "Çevrimiçi" : "Çevrimdışı";
+            }
+        });
+
+        async function startHub() {
+            try {
+                await connection.start();
+                console.log("SignalR bağlandı.");
+            } catch (err) {
+                console.error("SignalR bağlantı hatası:", err);
+                setTimeout(startHub, 3000);
+            }
+        }
+
+        // ── Boot ─────────────────────────────────────────────────────────────────
+        document.addEventListener("DOMContentLoaded", async () => {
+            await loadLists();
+            await startHub();
+        });
+
+        // ── Load users + groups into sidebar ─────────────────────────────────────
         async function loadLists() {
             const list = document.getElementById("chatList");
+            list.innerHTML = `<div class="text-center p-3"><div class="spinner-border spinner-border-sm text-primary"></div></div>`;
+
             const [uRes, gRes] = await Promise.all([
-                fetch(`${API_BASE}/User/list`, { headers: { "Authorization": `Bearer ${token}` }}),
-                fetch(`${API_BASE}/Group/list`, { headers: { "Authorization": `Bearer ${token}` }})
+                fetch(`${API_BASE}/User/list`,  { headers: authHeader() }),
+                fetch(`${API_BASE}/Group/list`, { headers: authHeader() })
             ]);
-            const users = await uRes.json();
-            const groups = await gRes.json();
+
+            const users  = uRes.ok  ? await uRes.json()  : [];
+            const groups = gRes.ok  ? await gRes.json()  : [];
+
             list.innerHTML = "";
-            users.forEach(u => list.innerHTML += `<div class="chat-list-item" onclick="startChat('${u.id}', false, this)">👤 ${u.fullName}</div>`);
-            groups.forEach(g => list.innerHTML += `<div class="chat-list-item" onclick="startChat('${g.id}', true, this)">👥 ${g.name}</div>`);
+
+            if (users.length === 0 && groups.length === 0) {
+                list.innerHTML = `<div class="text-muted text-center p-3 small">Henüz kullanıcı veya grup yok.</div>`;
+                return;
+            }
+
+            if (users.length > 0) {
+                list.innerHTML += `<div class="px-3 pt-3 pb-1 text-uppercase text-muted" style="font-size:10px;font-weight:700;letter-spacing:1px;">Kullanıcılar</div>`;
+                users.forEach(u => {
+                    list.innerHTML += `
+                        <div class="chat-list-item" data-uid="${u.id}" onclick="startChat('${u.id}', false, this, '${escapeHtml(u.fullName)}')">
+                            <span class="status-dot d-inline-block rounded-circle me-2"
+                                  style="width:8px;height:8px;background:#d1d5db;vertical-align:middle;"
+                                  title="Çevrimdışı"></span>
+                            👤 ${escapeHtml(u.fullName)}
+                        </div>`;
+                });
+            }
+
+            if (groups.length > 0) {
+                list.innerHTML += `<div class="px-3 pt-3 pb-1 text-uppercase text-muted" style="font-size:10px;font-weight:700;letter-spacing:1px;">Gruplar</div>`;
+                groups.forEach(g => {
+                    list.innerHTML += `
+                        <div class="chat-list-item" onclick="startChat('${g.id}', true, this, '${escapeHtml(g.name)}')">
+                            👥 ${escapeHtml(g.name)}
+                        </div>`;
+                });
+            }
         }
 
-        function startChat(id, group, element) {
-            activeId = id; isGroup = group;
+        // ── Open a conversation ───────────────────────────────────────────────────
+        async function startChat(id, group, element, name) {
+            // Leave previous SignalR group if needed
+            if (isGroup && activeName) {
+                try { await connection.invoke("LeaveGroup", activeName); } catch {}
+            }
+
+            activeId   = id;
+            isGroup    = group;
+            activeName = name;
+
             document.querySelectorAll('.chat-list-item').forEach(el => el.classList.remove('active-chat'));
             element.classList.add('active-chat');
-            loadHistory(id);
+
+            document.getElementById("chatHeader").innerHTML =
+                `${group ? "👥" : "👤"} <span class="text-dark">${escapeHtml(name)}</span>`;
+
+            // Join SignalR group
+            if (group && connection.state === signalR.HubConnectionState.Connected) {
+                try { await connection.invoke("JoinGroup", name); } catch {}
+            }
+
+            await loadHistory();
         }
 
-        async function loadHistory(id) {
+        // ── Load message history ──────────────────────────────────────────────────
+        async function loadHistory() {
             const chatBox = document.getElementById("chatBox");
-            chatBox.innerHTML = '<div class="text-center text-muted">Yükleniyor...</div>';
-            const res = await fetch(`${API_BASE}/Message/history/${id}`, { headers: { "Authorization": `Bearer ${token}` }});
-            const msgs = await res.json();
+            chatBox.innerHTML = `<div class="text-center text-muted my-3"><div class="spinner-border spinner-border-sm"></div></div>`;
+
+            // FIX (Chat UI): Use different endpoints for DM vs group
+            const url = isGroup
+                ? `${API_BASE}/Message/history/group/${activeId}`
+                : `${API_BASE}/Message/history/${activeId}`;
+
+            const res = await fetch(url, { headers: authHeader() });
+
             chatBox.innerHTML = "";
-            msgs.forEach(m => renderMessage(m.senderName, m.content, m.isMine));
-        }
 
-        function renderMessage(name, content, isMine) {
-            const chatBox = document.getElementById("chatBox");
-            chatBox.innerHTML += `<div class="p-2 rounded ${isMine ? 'msg-me' : 'msg-other'}" style="max-width:70%; border:1px solid #ccc;">
-                <small style="display:block; font-size:10px; color:#555;">${name}</small>${content}</div>`;
+            if (!res.ok) {
+                chatBox.innerHTML = `<div id="chatEmptyState">Mesajlar yüklenemedi.</div>`;
+                return;
+            }
+
+            const msgs = await res.json();
+
+            if (msgs.length === 0) {
+                chatBox.innerHTML = `<div id="chatEmptyState"><i class="fa-solid fa-comment-slash fa-2x mb-2 d-block"></i>Henüz mesaj yok. İlk mesajı siz gönderin!</div>`;
+                return;
+            }
+
+            msgs.forEach(m => renderMessage(m.senderName, m.content, m.isMine, m.sentDate));
             chatBox.scrollTop = chatBox.scrollHeight;
         }
 
-        async function sendMessage(content = null) {
-            const text = content || document.getElementById("messageInput").value;
-            if(!text || !activeId) return;
+        // ── Render a single message bubble ────────────────────────────────────────
+        function renderMessage(name, content, isMine, sentDate = null) {
+            const chatBox = document.getElementById("chatBox");
+
+            // Remove empty state if present
+            const empty = document.getElementById("chatEmptyState");
+            if (empty) empty.remove();
+
+            const timeStr = sentDate
+                ? new Date(sentDate).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })
+                : new Date().toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" });
+
+            const bubble = document.createElement("div");
+            bubble.className = `msg-bubble ${isMine ? "msg-me" : "msg-other"}`;
+            bubble.innerHTML = `
+                ${!isMine ? `<span class="msg-sender">${escapeHtml(name)}</span>` : ""}
+                ${content}
+                <span class="msg-time">${timeStr}</span>`;
+
+            chatBox.appendChild(bubble);
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+
+        // ── Send a message ────────────────────────────────────────────────────────
+        async function sendMessage(contentOverride = null) {
+            const input = document.getElementById("messageInput");
+            const text  = contentOverride || input.value.trim();
+
+            if (!text || !activeId) return;
 
             const payload = {
                 content: text,
-                [isGroup ? 'groupId' : 'receiverId']: isGroup ? parseInt(activeId) : activeId
+                ...(isGroup
+                    ? { groupId: parseInt(activeId) }
+                    : { receiverId: activeId })
             };
 
             const res = await fetch(`${API_BASE}/Message/send`, {
                 method: "POST",
-                headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+                headers: { "Content-Type": "application/json", ...authHeader() },
                 body: JSON.stringify(payload)
             });
 
-            if(res.ok) {
+            if (res.ok) {
                 renderMessage("Ben", text, true);
-                if(!content) document.getElementById("messageInput").value = "";
+                if (!contentOverride) input.value = "";
+            } else {
+                alert("Mesaj gönderilemedi!");
             }
         }
 
+        // ── File upload ───────────────────────────────────────────────────────────
         async function handleFileSelect(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
             const formData = new FormData();
-            formData.append("file", e.target.files[0]);
-            // TOKEN EKLEDİK:
+            formData.append("file", file);
+
             const res = await fetch(`${API_BASE}/Message/upload-file`, {
                 method: "POST",
-                headers: { "Authorization": `Bearer ${token}` },
+                headers: authHeader(),
                 body: formData
             });
-            const data = await res.json();
-            sendMessage(`<img src="${data.url}" style="max-width:150px;">`);
+
+            if (res.ok) {
+                const data = await res.json();
+                const ext = file.name.split('.').pop().toLowerCase();
+                const content = ["jpg","png","gif","webp"].includes(ext)
+                    ? `<img src="${data.url}" style="max-width:200px;border-radius:8px;">`
+                    : `<a href="${data.url}" target="_blank">📎 ${escapeHtml(file.name)}</a>`;
+                await sendMessage(content);
+            } else {
+                alert("Dosya yüklenemedi!");
+            }
+            // Reset input so same file can be re-selected
+            e.target.value = "";
         }
 
-        async function startCamera() {
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-                const video = document.createElement("video");
-                video.srcObject = stream;
-                video.play();
-                alert("Kamera hazır! (Snapshot için video elementini ekrana gömmelisin)");
-            } catch(e) { alert("Kamera izni reddedildi!"); }
+        // ── Helpers ───────────────────────────────────────────────────────────────
+        function authHeader() {
+            return { "Authorization": `Bearer ${token}` };
+        }
+
+        function escapeHtml(str) {
+            return String(str)
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;");
+        }
+
+        function showToast(message) {
+            // Simple toast notification for messages from other conversations
+            const toast = document.createElement("div");
+            toast.style.cssText = `
+                position:fixed; bottom:20px; right:20px; background:#333; color:#fff;
+                padding:10px 16px; border-radius:8px; font-size:0.85rem;
+                z-index:9999; max-width:300px; box-shadow:0 4px 12px rgba(0,0,0,0.2);
+                animation: fadeIn 0.3s ease;`;
+            toast.textContent = message;
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 4000);
         }
     </script>
 }

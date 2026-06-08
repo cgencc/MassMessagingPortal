@@ -45,36 +45,36 @@ namespace MassMessagingAPI.Controllers
                 SentDate = DateTime.Now
             };
 
-            // 1. Repository ile Veritabanına Kaydet
             await _messageRepository.AddAsync(message);
 
-            // 2. SignalR ile Anlık İlet
             if (model.GroupId.HasValue)
             {
                 var group = await _groupRepository.GetByIdAsync(model.GroupId.Value);
                 if (group != null)
                 {
-                    await _hubContext.Clients.Group(group.Name).SendAsync("ReceiveGroupMessage", group.Name, senderName, model.Content);
+                    await _hubContext.Clients.Group(group.Name)
+                        .SendAsync("ReceiveGroupMessage", group.Name, senderName, model.Content);
                 }
             }
             else if (!string.IsNullOrEmpty(model.ReceiverId))
             {
-                await _hubContext.Clients.User(model.ReceiverId).SendAsync("ReceiveMessage", senderId, senderName, model.Content);
+                await _hubContext.Clients.User(model.ReceiverId)
+                    .SendAsync("ReceiveMessage", senderId, senderName, model.Content);
             }
 
             return Ok(new { Message = "Mesaj gönderildi." });
         }
 
+        // Direct message history between two users
         [HttpGet("history/{userId}")]
         public async Task<IActionResult> GetMessageHistory(string userId)
         {
             var myId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
 
-            // Repository üzerinden Include kullanarak Sender (Gönderen Kullanıcı) bilgilerini çekiyoruz
             var messages = await _messageRepository.FindAsync(
-                m => (m.SenderId == myId && m.ReceiverId == userId) || (m.SenderId == userId && m.ReceiverId == myId),
-                m => m.Sender!
-            );
+                m => (m.SenderId == myId && m.ReceiverId == userId) ||
+                     (m.SenderId == userId && m.ReceiverId == myId),
+                m => m.Sender!);
 
             var result = messages
                 .OrderBy(m => m.SentDate)
@@ -89,6 +89,31 @@ namespace MassMessagingAPI.Controllers
 
             return Ok(result);
         }
+
+        // FIX (Chat UI): Group message history — was missing, caused chat box to be empty for groups
+        [HttpGet("history/group/{groupId}")]
+        public async Task<IActionResult> GetGroupMessageHistory(int groupId)
+        {
+            var myId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+            var messages = await _messageRepository.FindAsync(
+                m => m.GroupId == groupId,
+                m => m.Sender!);
+
+            var result = messages
+                .OrderBy(m => m.SentDate)
+                .Select(m => new
+                {
+                    m.Id,
+                    m.Content,
+                    m.SentDate,
+                    SenderName = m.Sender!.FirstName + " " + m.Sender.LastName,
+                    IsMine = m.SenderId == myId
+                });
+
+            return Ok(result);
+        }
+
         [HttpPut("mark-as-read/{messageId}")]
         public async Task<IActionResult> MarkAsRead(int messageId)
         {
@@ -100,12 +125,12 @@ namespace MassMessagingAPI.Controllers
 
             return Ok();
         }
+
         [HttpPost("upload-file")]
         public async Task<IActionResult> UploadFile(IFormFile file)
         {
             if (file == null || file.Length == 0) return BadRequest("Dosya yok.");
 
-            // Güvenlik: Sadece resim ve video izinleri
             var allowedExtensions = new[] { ".jpg", ".png", ".mp4", ".pdf" };
             var ext = Path.GetExtension(file.FileName).ToLower();
             if (!allowedExtensions.Contains(ext)) return BadRequest("Desteklenmeyen dosya tipi.");
@@ -120,6 +145,7 @@ namespace MassMessagingAPI.Controllers
 
             return Ok(new { url = "/uploads/" + fileName });
         }
+
         [HttpPost("send-admin")]
         [Authorize(Roles = "Admin")]
         public async Task<IActionResult> SendAdminMessage([FromBody] string content)
@@ -127,6 +153,5 @@ namespace MassMessagingAPI.Controllers
             await _hubContext.Clients.All.SendAsync("ReceiveAdminMessage", content);
             return Ok();
         }
-
     }
 }
