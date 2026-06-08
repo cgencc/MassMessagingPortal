@@ -62,6 +62,22 @@ namespace MassMessagingAPI.Hubs // Kendi namespace'iniz
             }
             await base.OnDisconnectedAsync(exception);
         }
+        public async Task SendTypingStatus(string receiverId, bool isGroup)
+        {
+            var senderName = Context.User?.FindFirst("FirstName")?.Value ?? "Biri";
+
+            if (isGroup)
+            {
+                // Gruba yazıyorsa gruptaki herkese bildir
+                await Clients.Group(receiverId).SendAsync("ReceiveTyping", receiverId, senderName, true);
+            }
+            else if (!string.IsNullOrEmpty(receiverId))
+            {
+                // Birebir sohbet
+                var myId = Context.User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+                await Clients.User(receiverId).SendAsync("ReceiveTyping", myId, senderName, false);
+            }
+        }
 
     }
 }

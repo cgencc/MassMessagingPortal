@@ -1,0 +1,58 @@
+﻿@{
+    ViewData["Title"] = "Profilim";
+}
+
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card shadow-sm border-0">
+                <div class="card-body p-4 text-center">
+                    <div class="mb-4">
+                        <i class="fa-solid fa-circle-user fa-5x text-primary"></i>
+                    </div>
+                    <h4 class="fw-bold" id="userName">Yükleniyor...</h4>
+                    <p class="text-muted" id="userEmail"></p>
+
+                    <hr>
+
+                    <div class="text-start mt-4">
+                        <label class="small text-muted fw-bold">Ad Soyad</label>
+                        <input type="text" id="fullNameDisplay" class="form-control mb-3" readonly>
+
+                        <label class="small text-muted fw-bold">E-posta</label>
+                        <input type="text" id="emailDisplay" class="form-control mb-3" readonly>
+                    </div>
+
+                    <a href="/Chat/Index" class="btn btn-outline-primary w-100 mt-3">Sohbetlere Dön</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        const API_BASE = "https://localhost:7124/api";
+        const token = localStorage.getItem("JWToken");
+
+        document.addEventListener("DOMContentLoaded", async () => {
+            if(!token) window.location.href = "/Auth/Login";
+
+            try {
+                const res = await fetch(`${API_BASE}/User/profile`, {
+                    headers: { "Authorization": `Bearer ${token}` }
+                });
+
+                if(res.ok) {
+                    const user = await res.json();
+                    document.getElementById("userName").innerText = user.firstName + " " + user.lastName;
+                    document.getElementById("userEmail").innerText = user.email;
+                    document.getElementById("fullNameDisplay").value = user.firstName + " " + user.lastName;
+                    document.getElementById("emailDisplay").value = user.email;
+                }
+            } catch(e) {
+                console.error("Profil yüklenemedi:", e);
+            }
+        });
+    </script>
+}

@@ -2,6 +2,74 @@
     ViewData["Title"] = "Yönetim Paneli";
 }
 
+<style>
+    .chat-list-item {
+        cursor: pointer;
+        padding: 15px;
+        border-bottom: 1px solid #eee;
+        transition: 0.2s;
+    }
+
+        .chat-list-item:hover, .active-chat {
+            background-color: #e2e3e5 !important;
+            border-left: 5px solid #0d6efd;
+        }
+
+    #chatBox {
+        display: flex;
+        flex-direction: column;
+        overflow-y: auto;
+        background: #e5ddd5;
+        gap: 8px;
+        flex-grow: 1;
+        padding: 12px;
+    }
+
+    .msg-bubble {
+        max-width: 70%;
+        padding: 8px 12px;
+        border-radius: 12px;
+        word-break: break-word;
+        font-size: 0.92rem;
+    }
+
+    .msg-me {
+        background-color: #d1e7dd;
+        align-self: flex-end;
+        border-bottom-right-radius: 2px;
+    }
+
+    .msg-other {
+        background-color: #ffffff;
+        align-self: flex-start;
+        border-bottom-left-radius: 2px;
+        border: 1px solid #ddd;
+    }
+
+    .msg-bubble .msg-sender {
+        font-size: 10px;
+        color: #555;
+        display: block;
+        margin-bottom: 2px;
+        font-weight: 600;
+    }
+
+    .msg-bubble .msg-time {
+        font-size: 9px;
+        color: #888;
+        display: block;
+        text-align: right;
+        margin-top: 3px;
+    }
+
+    #chatEmptyState {
+        color: #aaa;
+        text-align: center;
+        margin: auto;
+        font-size: 0.9rem;
+    }
+</style>
+
 <div class="container-fluid mt-4">
     <div class="row">
         <div class="col-lg-10 offset-lg-1">
@@ -84,14 +152,14 @@
         const API_BASE = "https://localhost:7124/api";
         const token = localStorage.getItem("JWToken");
 
+        // 1. Sayfa yüklendiğinde yetkiyi kontrol et
         document.addEventListener("DOMContentLoaded", () => {
-            // 1. Yetki Kontrolü (Token yoksa kov)
             if(!token) {
                 window.location.href = "/Auth/Login";
                 return;
             }
 
-            // 2. Sadece Admin Girebilir Koruması
+            // Admin Yetki Kontrolü
             try {
                 const base64Url = token.split('.')[1];
                 const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
@@ -112,12 +180,12 @@
                 return;
             }
 
-            // 3. Verileri Yükle
+            // Verileri yükle
             loadUsers();
             loadGroups();
         });
 
-        // XSS Koruması (HTML sızmalarını engeller)
+        // 2. Güvenlik İçin XSS Koruması
         function escapeHtml(str) {
             return String(str)
                 .replace(/&/g, "&amp;")
@@ -126,6 +194,7 @@
                 .replace(/"/g, "&quot;");
         }
 
+        // 3. Kullanıcıları Listele
         async function loadUsers() {
             try {
                 const response = await fetch(`${API_BASE}/Admin/users`, { headers: { "Authorization": `Bearer ${token}` }});
@@ -148,10 +217,11 @@
                     document.getElementById("usersTableBody").innerHTML = `<tr><td colspan="3" class="text-center text-danger p-4">Kullanıcılar yüklenemedi.</td></tr>`;
                 }
             } catch (error) {
-                console.error(error);
+                console.error("User Load Error:", error);
             }
         }
 
+        // 4. Grupları Listele
         async function loadGroups() {
             try {
                 const response = await fetch(`${API_BASE}/Group/list`, { headers: { "Authorization": `Bearer ${token}` }});
@@ -166,10 +236,11 @@
                     document.getElementById("groupListUI").innerHTML = html || "<li class='list-group-item text-muted text-center p-3'>Henüz grup oluşturulmamış.</li>";
                 }
             } catch(error) {
-                console.error(error);
+                console.error("Group Load Error:", error);
             }
         }
 
+        // 5. Grup Oluştur
         async function createGroup() {
             const input = document.getElementById("newGroupName");
             const groupName = input.value.trim();
@@ -182,7 +253,6 @@
                 const res = await fetch(`${API_BASE}/Group/create`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
-                    // DÜZELTME: API'nin beklediği DTO objesini gönderiyoruz
                     body: JSON.stringify({ name: groupName })
                 });
 
@@ -192,16 +262,15 @@
                     resDiv.className = "mt-2 small fw-bold text-success";
                     resDiv.innerText = "Grup başarıyla oluşturuldu!";
                     input.value = "";
-                    loadGroups(); // Gruplar listesini otomatik tazele
+                    loadGroups();
+                    setTimeout(() => resDiv.innerText = "", 3000);
                 } else {
                     resDiv.className = "mt-2 small fw-bold text-danger";
                     resDiv.innerText = "Grup oluşturulurken hata oluştu.";
                 }
-
-                setTimeout(() => resDiv.innerText = "", 3000);
             } catch(e) {
-                console.error("Grup oluşturma hatası:", e);
+                console.error("Group Create Error:", e);
             }
         }
     </script>
-}
+}x

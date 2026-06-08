@@ -90,6 +90,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+app.UseStaticFiles(); // Dýþarýdan uploads klasörüne eriþimi açar
 app.UseCors("AllowAll");
 app.UseAuthentication();
 app.UseAuthorization();

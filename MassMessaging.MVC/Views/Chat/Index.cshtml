@@ -23,6 +23,7 @@
         gap: 8px;
         flex-grow: 1;
         padding: 12px;
+        height: 60vh;
     }
 
     .msg-bubble {
@@ -82,6 +83,7 @@
         <div id="adminPin" class="alert alert-warning m-0 py-2 px-3" style="display:none; border-radius:0; font-size:0.85rem;"></div>
 
         <div id="chatHeader" class="p-3 border-bottom bg-light fw-semibold text-muted" style="font-size:0.9rem;">
+            <div id="typingStatus" class="px-3 pb-2 bg-light text-success small fw-bold" style="display:none; font-style:italic;"></div>
             Bir sohbet seçin
         </div>
 
@@ -97,6 +99,9 @@
             <button class="btn btn-outline-secondary btn-sm" onclick="document.getElementById('mediaInput').click()" title="Dosya ekle">
                 <i class="fa-solid fa-paperclip"></i>
             </button>
+            <button class="btn btn-outline-secondary btn-sm" onclick="startCamera()" title="Kamera">
+                <i class="fa-solid fa-camera"></i>
+            </button>
 
             <input type="text" id="messageInput" class="form-control rounded-pill"
                    placeholder="Bir şeyler yazın..."
@@ -111,34 +116,37 @@
 @section Scripts {
     <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.0/signalr.min.js"></script>
     <script>
-        const API_BASE   = "https://localhost:7124/api";
-        const HUB_URL    = "https://localhost:7124/chatHub";
-        const token      = localStorage.getItem("JWToken");
+        const API_BASE = "https://localhost:7124/api";
+        const HUB_URL = "https://localhost:7124/chatHub";
+        const token = localStorage.getItem("JWToken");
 
-        // 1. Önce değişkenleri tanımlıyoruz (Referans hatasını çözen yer)
-        let activeId   = null;
-        let isGroup    = false;
+        // GLOBAL DEĞİŞKENLER (Hata vermemesi için en üstte tanımlı)
+        let activeId = null;
+        let isGroup = false;
         let activeName = "";
         let connection = null;
+        let typingTimer;
 
-        // 2. Token yoksa direkt Login'e gönder
+        // 1. Yetki Kontrolü
         if (!token) {
             window.location.href = "/Auth/Login";
         }
 
-        // 3. Sayfanın HTML'i hazır olduğunda initApp'i çalıştır
-        document.addEventListener("DOMContentLoaded", () => {
-            if(token) initApp();
+        // 2. DOM Yüklendiğinde Başlat
+        document.addEventListener("DOMContentLoaded", async () => {
+            if(token) {
+                await initApp();
+            }
         });
 
         async function initApp() {
-            // ── SignalR connection ────────────────────────────────────────────────────
+            // SignalR bağlantısını kur
             connection = new signalR.HubConnectionBuilder()
                 .withUrl(HUB_URL, { accessTokenFactory: () => token })
                 .withAutomaticReconnect()
                 .build();
 
-            // Gelen özel mesaj (DM)
+            // Gelen mesajları dinle
             connection.on("ReceiveMessage", (senderId, senderName, content) => {
                 if (!isGroup && activeId === senderId) {
                     renderMessage(senderName, content, false);
@@ -147,7 +155,6 @@
                 }
             });
 
-            // Gelen grup mesajı
             connection.on("ReceiveGroupMessage", (groupName, senderName, content) => {
                 if (isGroup && activeName === groupName) {
                     renderMessage(senderName, content, false);
@@ -156,256 +163,164 @@
                 }
             });
 
-            // Yönetici Duyurusu
             connection.on("ReceiveAdminMessage", (content) => {
                 const pin = document.getElementById("adminPin");
                 pin.innerHTML = `<i class='fa-solid fa-bullhorn me-2'></i><strong>Yönetici Duyurusu:</strong> ${content}`;
                 pin.style.display = "block";
             });
 
-            // Çevrimiçi/Çevrimdışı durumu
-            connection.on("UserStatusChanged", (userId, isOnline) => {
-                const el = document.querySelector(`[data-uid="${userId}"] .status-dot`);
-                if (el) {
-                    el.style.backgroundColor = isOnline ? "#22c55e" : "#d1d5db";
-                    el.title = isOnline ? "Çevrimiçi" : "Çevrimdışı";
+            connection.on("ReceiveTyping", (id, name, isGroupMsg) => {
+                if (isGroupMsg === isGroup && id === activeId) {
+                    const statusEl = document.getElementById("typingStatus");
+                    statusEl.innerText = `${name} yazıyor...`;
+                    statusEl.style.display = "block";
+                    clearTimeout(typingTimer);
+                    typingTimer = setTimeout(() => { statusEl.style.display = "none"; }, 2000);
                 }
             });
 
-            // Başlatma işlemleri
-            await loadLists();
-            await startHub();
-        }
-
-        async function startHub() {
+            // Başlat
             try {
                 await connection.start();
                 console.log("SignalR bağlandı.");
+                await loadLists(); // Listeleri yükle
             } catch (err) {
-                console.error("SignalR bağlantı hatası:", err);
-                setTimeout(startHub, 3000);
+                console.error("SignalR hatası:", err);
             }
         }
 
-        // ── Kullanıcıları ve Grupları Yükle ─────────────────────────────────────
+        // 3. Yazıyor durumu tetikleyici
+        document.getElementById("messageInput").addEventListener("input", () => {
+            if(activeId && connection && connection.state === signalR.HubConnectionState.Connected) {
+                connection.invoke("SendTypingStatus", activeId, isGroup).catch(err => console.error(err));
+            }
+        });
+
+        // 4. Liste Yükleme
         async function loadLists() {
             const list = document.getElementById("chatList");
             list.innerHTML = `<div class="text-center p-3"><div class="spinner-border spinner-border-sm text-primary"></div></div>`;
 
             try {
                 const [uRes, gRes] = await Promise.all([
-                    fetch(`${API_BASE}/User/list`,  { headers: authHeader() }),
-                    fetch(`${API_BASE}/Group/list`, { headers: authHeader() })
+                    fetch(`${API_BASE}/User/list`, { headers: { "Authorization": `Bearer ${token}` } }),
+                    fetch(`${API_BASE}/Group/list`, { headers: { "Authorization": `Bearer ${token}` } })
                 ]);
 
-                const users  = uRes.ok  ? await uRes.json()  : [];
-                const groups = gRes.ok  ? await gRes.json()  : [];
+                const users = uRes.ok ? await uRes.json() : [];
+                const groups = gRes.ok ? await gRes.json() : [];
 
                 list.innerHTML = "";
 
-                if (users.length === 0 && groups.length === 0) {
-                    list.innerHTML = `<div class="text-muted text-center p-3 small">Henüz kullanıcı veya grup yok.</div>`;
-                    return;
-                }
-
-                let htmlContent = "";
-
                 if (users.length > 0) {
-                    htmlContent += `<div class="px-3 pt-3 pb-1 text-uppercase text-muted" style="font-size:10px;font-weight:700;letter-spacing:1px;">Kullanıcılar</div>`;
+                    list.innerHTML += `<div class="px-3 pt-3 pb-1 text-uppercase text-muted" style="font-size:10px;font-weight:700;">Kullanıcılar</div>`;
                     users.forEach(u => {
-                        const name = u.fullName || u.firstName || "Kullanıcı";
-                        htmlContent += `
-                            <div class="chat-list-item" data-uid="${u.id}" onclick="startChat('${u.id}', false, this, '${escapeHtml(name)}')">
-                                <span class="status-dot d-inline-block rounded-circle me-2"
-                                      style="width:8px;height:8px;background:#d1d5db;vertical-align:middle;"
-                                      title="Çevrimdışı"></span>
+                        const name = u.fullName || "Kullanıcı";
+                        list.innerHTML += `
+                            <div class="chat-list-item" onclick="startChat('${u.id}', false, this, '${escapeHtml(name)}')">
                                 👤 ${escapeHtml(name)}
                             </div>`;
                     });
                 }
 
                 if (groups.length > 0) {
-                    htmlContent += `<div class="px-3 pt-3 pb-1 text-uppercase text-muted" style="font-size:10px;font-weight:700;letter-spacing:1px;">Gruplar</div>`;
+                    list.innerHTML += `<div class="px-3 pt-3 pb-1 text-uppercase text-muted" style="font-size:10px;font-weight:700;">Gruplar</div>`;
                     groups.forEach(g => {
                         const name = g.name || "Grup";
-                        htmlContent += `
+                        list.innerHTML += `
                             <div class="chat-list-item" onclick="startChat('${g.id}', true, this, '${escapeHtml(name)}')">
                                 👥 ${escapeHtml(name)}
                             </div>`;
                     });
                 }
-
-                list.innerHTML = htmlContent;
-
             } catch(e) {
-                console.error("Liste yüklenirken hata:", e);
-                list.innerHTML = `<div class="text-danger text-center p-3 small">Veriler yüklenemedi. API bağlantınızı kontrol edin.</div>`;
+                list.innerHTML = `<div class="p-3 text-danger small">Listeler yüklenemedi.</div>`;
             }
         }
 
-        // ── Bir Sohbet Başlat ───────────────────────────────────────────────────
-        async function startChat(id, group, element, name) {
-            if (isGroup && activeName) {
-                try { await connection.invoke("LeaveGroup", activeName); } catch {}
-            }
-
-            activeId   = id;
-            isGroup    = group;
+        // 5. Sohbeti Başlat
+        function startChat(id, group, element, name) {
+            activeId = id;
+            isGroup = group;
             activeName = name;
 
             document.querySelectorAll('.chat-list-item').forEach(el => el.classList.remove('active-chat'));
             if(element) element.classList.add('active-chat');
 
-            document.getElementById("chatHeader").innerHTML =
-                `${group ? "👥" : "👤"} <span class="text-dark">${escapeHtml(name)}</span>`;
-
-            if (group && connection.state === signalR.HubConnectionState.Connected) {
-                try { await connection.invoke("JoinGroup", name); } catch {}
-            }
-
-            await loadHistory();
+            document.getElementById("chatHeader").innerText = name;
+            loadHistory(id);
         }
 
-        // ── Mesaj Geçmişini Yükle ──────────────────────────────────────────────────
-        async function loadHistory() {
+        // 6. Geçmişi Yükle
+        async function loadHistory(id) {
             const chatBox = document.getElementById("chatBox");
-            chatBox.innerHTML = `<div class="text-center text-muted my-3"><div class="spinner-border spinner-border-sm"></div></div>`;
-
-            const url = isGroup
-                ? `${API_BASE}/Message/history/group/${activeId}`
-                : `${API_BASE}/Message/history/${activeId}`;
+            chatBox.innerHTML = '<div class="text-center p-3 text-muted">Yükleniyor...</div>';
 
             try {
-                const res = await fetch(url, { headers: authHeader() });
-                chatBox.innerHTML = "";
-
-                if (!res.ok) {
-                    chatBox.innerHTML = `<div id="chatEmptyState">Mesajlar yüklenemedi.</div>`;
-                    return;
-                }
-
+                const res = await fetch(`${API_BASE}/Message/history/${id}`, { headers: { "Authorization": `Bearer ${token}` } });
                 const msgs = await res.json();
-
-                if (msgs.length === 0) {
-                    chatBox.innerHTML = `<div id="chatEmptyState"><i class="fa-solid fa-comment-slash fa-2x mb-2 d-block"></i>Henüz mesaj yok. İlk mesajı siz gönderin!</div>`;
-                    return;
-                }
-
+                chatBox.innerHTML = "";
                 msgs.forEach(m => renderMessage(m.senderName, m.content, m.isMine, m.sentDate));
-                chatBox.scrollTop = chatBox.scrollHeight;
-            } catch(e) {
-                chatBox.innerHTML = `<div id="chatEmptyState">Sohbet yüklenirken bir hata oluştu.</div>`;
-            }
+            } catch(e) { chatBox.innerHTML = '<div class="text-center p-3 text-danger">Hata!</div>'; }
         }
 
-        // ── Mesaj Balonunu Ekrana Çiz ────────────────────────────────────────
+        // 7. Mesajı Çiz
         function renderMessage(name, content, isMine, sentDate = null) {
             const chatBox = document.getElementById("chatBox");
-
             const empty = document.getElementById("chatEmptyState");
             if (empty) empty.remove();
 
-            const timeStr = sentDate
-                ? new Date(sentDate).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })
-                : new Date().toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" });
-
-            const bubble = document.createElement("div");
-            bubble.className = `msg-bubble ${isMine ? "msg-me" : "msg-other"}`;
-            bubble.innerHTML = `
-                ${!isMine ? `<span class="msg-sender">${escapeHtml(name)}</span>` : ""}
-                ${content}
-                <span class="msg-time">${timeStr}</span>`;
-
-            chatBox.appendChild(bubble);
+            const timeStr = new Date().toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" });
+            chatBox.innerHTML += `
+                <div class="msg-bubble ${isMine ? 'msg-me' : 'msg-other'}">
+                    <span class="msg-sender">${escapeHtml(name)}</span>
+                    ${content}
+                    <span class="msg-time">${timeStr}</span>
+                </div>`;
             chatBox.scrollTop = chatBox.scrollHeight;
         }
 
-        // ── Mesaj Gönder ────────────────────────────────────────────────────────
+        // 8. Gönder
         async function sendMessage(contentOverride = null) {
-            const input = document.getElementById("messageInput");
-            const text  = contentOverride || input.value.trim();
+            const text = contentOverride || document.getElementById("messageInput").value.trim();
+            if(!text || !activeId) return;
 
-            if (!text || !activeId) return;
+            const res = await fetch(`${API_BASE}/Message/send`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+                body: JSON.stringify({ content: text, [isGroup ? 'groupId' : 'receiverId']: isGroup ? parseInt(activeId) : activeId })
+            });
 
-            const payload = {
-                content: text,
-                ...(isGroup ? { groupId: parseInt(activeId) } : { receiverId: activeId })
-            };
-
-            try {
-                const res = await fetch(`${API_BASE}/Message/send`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json", ...authHeader() },
-                    body: JSON.stringify(payload)
-                });
-
-                if (res.ok) {
-                    renderMessage("Ben", text, true);
-                    if (!contentOverride) input.value = "";
-                } else {
-                    alert("Mesaj gönderilemedi!");
-                }
-            } catch(e) {
-                console.error(e);
+            if(res.ok) {
+                renderMessage("Ben", text, true);
+                if(!contentOverride) document.getElementById("messageInput").value = "";
             }
         }
 
-        // ── Dosya Yükle ───────────────────────────────────────────────────────────
+        // 9. Medya
         async function handleFileSelect(e) {
             const file = e.target.files[0];
-            if (!file) return;
-
-            const formData = new FormData();
-            formData.append("file", file);
-
-            try {
-                const res = await fetch(`${API_BASE}/Message/upload-file`, {
-                    method: "POST",
-                    headers: authHeader(),
-                    body: formData
-                });
-
-                if (res.ok) {
-                    const data = await res.json();
-                    const ext = file.name.split('.').pop().toLowerCase();
-                    const content = ["jpg","png","gif","webp"].includes(ext)
-                        ? `<img src="${data.url}" style="max-width:200px;border-radius:8px;">`
-                        : `<a href="${data.url}" target="_blank">📎 ${escapeHtml(file.name)}</a>`;
-
-                    await sendMessage(content);
-                } else {
-                    alert("Dosya yüklenemedi!");
-                }
-            } catch (error) {
-                console.error("Yükleme hatası:", error);
-            }
-
-            e.target.value = "";
+            const formData = new FormData(); formData.append("file", file);
+            const res = await fetch(`${API_BASE}/Message/upload-file`, { method: "POST", headers: { "Authorization": `Bearer ${token}` }, body: formData });
+            const data = await res.json();
+            sendMessage(`<img src="https://localhost:7124${data.url}" style="max-width:200px; border-radius:8px;">`);
         }
 
-        // ── Yardımcı Fonksiyonlar ──────────────────────────────────────────────────
-        function authHeader() {
-            return { "Authorization": `Bearer ${token}` };
+        function startCamera() {
+            alert("Kamera hazır!");
         }
 
+        // 10. Yardımcı
         function escapeHtml(str) {
-            return String(str)
-                .replace(/&/g, "&amp;")
-                .replace(/</g, "&lt;")
-                .replace(/>/g, "&gt;")
-                .replace(/"/g, "&quot;");
+            return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
         }
 
         function showToast(message) {
             const toast = document.createElement("div");
-            toast.style.cssText = `
-                position:fixed; bottom:20px; right:20px; background:#333; color:#fff;
-                padding:10px 16px; border-radius:8px; font-size:0.85rem;
-                z-index:9999; max-width:300px; box-shadow:0 4px 12px rgba(0,0,0,0.2);
-                animation: fadeIn 0.3s ease;`;
+            toast.style.cssText = "position:fixed; bottom:20px; right:20px; background:#333; color:#fff; padding:10px 16px; border-radius:8px;";
             toast.textContent = message;
             document.body.appendChild(toast);
-            setTimeout(() => toast.remove(), 4000);
+            setTimeout(() => toast.remove(), 3000);
         }
     </script>
 }
