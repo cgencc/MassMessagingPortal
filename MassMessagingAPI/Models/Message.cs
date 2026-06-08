@@ -19,5 +19,7 @@
         public Group? Group { get; set; }
 
         public bool IsRead { get; set; } = false;
+        public bool IsDeleted { get; set; } = false; // Mesaj silindi mi?
+        public bool IsEdited { get; set; } = false; // Mesaj düzenlendi mi?
     }
 }

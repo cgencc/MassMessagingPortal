@@ -155,5 +155,27 @@ namespace MassMessagingAPI.Controllers
             await _hubContext.Clients.All.SendAsync("ReceiveAdminMessage", content);
             return Ok();
         }
+        [HttpPut("edit")]
+        public async Task<IActionResult> EditMessage([FromBody] EditMessageDto dto)
+        {
+            var msg = await _messageRepository.GetByIdAsync(dto.Id);
+            if (msg == null || msg.SenderId != User.FindFirst(ClaimTypes.NameIdentifier)?.Value) return Unauthorized();
+
+            msg.Content = dto.Content;
+            msg.IsEdited = true;
+            await _messageRepository.UpdateAsync(msg);
+            return Ok();
+        }
+
+        [HttpDelete("delete/{id}")]
+        public async Task<IActionResult> DeleteMessage(int id)
+        {
+            var msg = await _messageRepository.GetByIdAsync(id);
+            if (msg == null || msg.SenderId != User.FindFirst(ClaimTypes.NameIdentifier)?.Value) return Unauthorized();
+
+            msg.IsDeleted = true; // Hard delete yerine soft delete yapıyoruz
+            await _messageRepository.UpdateAsync(msg);
+            return Ok();
+        }
     }
 }

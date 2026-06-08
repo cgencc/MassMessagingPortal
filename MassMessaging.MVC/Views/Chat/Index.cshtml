@@ -32,6 +32,7 @@
         border-radius: 12px;
         word-break: break-word;
         font-size: 0.92rem;
+        position: relative;
     }
 
     .msg-me {
@@ -73,9 +74,7 @@
 
 <div class="row g-0 mt-3" style="height: 85vh;">
     <div class="col-md-3 border-end bg-white d-flex flex-column">
-        <div class="p-3 border-bottom bg-light fw-bold">
-            <i class="fa-solid fa-comments text-primary me-2"></i>Sohbetler
-        </div>
+        <div class="p-3 border-bottom bg-light fw-bold"><i class="fa-solid fa-comments text-primary me-2"></i>Sohbetler</div>
         <div id="chatList" style="overflow-y:auto; flex:1;"></div>
     </div>
 
@@ -119,33 +118,38 @@
         const token = localStorage.getItem("JWToken");
 
         // --- Global Değişkenler ---
-        let activeId = null;
-        let isGroup = false;
-        let activeName = "";
-        let connection = null;
-        let typingTimer;
+        let activeId = null, isGroup = false, activeName = "", connection = null, typingTimer;
+        let currentPage = 1, isLoading = false, hasMore = true;
 
         // --- Başlatma İşlemleri ---
         if (!token) window.location.href = "/Auth/Login";
 
         document.addEventListener("DOMContentLoaded", async () => {
+            // Bildirim izni iste
+            if (Notification.permission !== "granted") Notification.requestPermission();
+
             if (token) await initApp();
         });
 
         async function initApp() {
             connection = new signalR.HubConnectionBuilder()
                 .withUrl(HUB_URL, { accessTokenFactory: () => token })
-                .withAutomaticReconnect()
-                .build();
+                .withAutomaticReconnect().build();
 
-            // Hub Dinleyicileri
+            // Mesaj alma ve Bildirim tetikleme
             connection.on("ReceiveMessage", (sId, sName, content) => {
-                if (!isGroup && activeId === sId) renderMessage(sName, content, false);
+                if (document.hidden && activeId !== sId) {
+                    new Notification("Yeni Mesaj!", { body: `${sName}: ${content}`, icon: "/favicon.ico" });
+                }
+                if (!isGroup && activeId === sId) renderMessage(sName, content, false, null, true);
                 else showToast(`📩 ${sName}: ${content}`);
             });
 
             connection.on("ReceiveGroupMessage", (gName, sName, content) => {
-                if (isGroup && activeName === gName) renderMessage(sName, content, false);
+                if (document.hidden && activeName !== gName) {
+                    new Notification(`Yeni Mesaj: ${gName}`, { body: `${sName}: ${content}`, icon: "/favicon.ico" });
+                }
+                if (isGroup && activeName === gName) renderMessage(sName, content, false, null, true);
                 else showToast(`👥 [${gName}] ${sName}: ${content}`);
             });
 
@@ -205,44 +209,68 @@
 
         // --- Sohbet Başlat ---
         function startChat(id, group, element, name) {
-            activeId = id; isGroup = group; activeName = name;
+            activeId = id; isGroup = group; activeName = name; currentPage = 1; hasMore = true;
             document.querySelectorAll('.chat-list-item').forEach(el => el.classList.remove('active-chat'));
             if(element) element.classList.add('active-chat');
             document.getElementById("chatHeader").innerText = name;
             loadHistory(id);
         }
 
-        // --- Mesaj Geçmişi ---
-        async function loadHistory(id) {
+        // --- Sonsuz Kaydırma ile Mesaj Geçmişi ---
+        async function loadHistory(id, isLoadMore = false) {
+            if (isLoading || (!hasMore && isLoadMore)) return;
+            isLoading = true;
+
             const chatBox = document.getElementById("chatBox");
-            chatBox.innerHTML = '<div class="text-center p-3 text-muted">Yükleniyor...</div>';
+            if (!isLoadMore) chatBox.innerHTML = '<div class="text-center p-3 text-muted">Yükleniyor...</div>';
+
             try {
-                const res = await fetch(`${API_BASE}/Message/history/${id}`, { headers: { "Authorization": `Bearer ${token}` } });
+                const res = await fetch(`${API_BASE}/Message/history/${id}/${currentPage}`, {
+                    headers: { "Authorization": `Bearer ${token}` }
+                });
                 const msgs = await res.json();
-                chatBox.innerHTML = "";
-                msgs.forEach(m => renderMessage(m.senderName, m.content, m.isMine, m.sentDate));
+
+                if (msgs.length === 0) { hasMore = false; isLoading = false; if(!isLoadMore) chatBox.innerHTML = ""; return; }
+
+                if (!isLoadMore) chatBox.innerHTML = "";
+                msgs.forEach(m => renderMessage(m.senderName, m.content, m.isMine, m.sentDate, !isLoadMore));
+                currentPage++;
             } catch(e) { chatBox.innerHTML = '<div class="text-center p-3 text-danger">Hata!</div>'; }
+            isLoading = false;
         }
 
+        // Scroll dinleyicisi
+        document.getElementById("chatBox").addEventListener("scroll", function() {
+            if (this.scrollTop === 0 && !isLoading && hasMore) loadHistory(activeId, true);
+        });
+
         // --- Mesaj Çizim ---
-        function renderMessage(name, content, isMine, sentDate = null) {
+        function renderMessage(name, content, isMine, sentDate = null, toBottom = true) {
             const chatBox = document.getElementById("chatBox");
             const empty = document.getElementById("chatEmptyState");
             if (empty) empty.remove();
 
-            const timeStr = new Date().toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" });
-            chatBox.innerHTML += `
-                <div class="msg-bubble ${isMine ? 'msg-me' : 'msg-other'}">
-                    <span class="msg-sender">${escapeHtml(name)}</span>
+            const timeStr = sentDate ? new Date(sentDate).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" }) : "";
+            const bubbleClass = (isMine === true || isMine === "true") ? 'msg-me' : 'msg-other';
+            const msgHtml = `
+                <div class="msg-bubble ${bubbleClass}">
+                    ${!isMine ? `<span class="msg-sender">${escapeHtml(name)}</span>` : ""}
                     ${content}
                     <span class="msg-time">${timeStr}</span>
                 </div>`;
-            chatBox.scrollTop = chatBox.scrollHeight;
+
+            if (toBottom) {
+                chatBox.innerHTML += msgHtml;
+                chatBox.scrollTop = chatBox.scrollHeight;
+            } else {
+                chatBox.insertAdjacentHTML('afterbegin', msgHtml);
+            }
         }
 
         // --- Mesaj Gönder ---
         async function sendMessage(contentOverride = null) {
-            const text = contentOverride || document.getElementById("messageInput").value.trim();
+            const input = document.getElementById("messageInput");
+            const text = contentOverride || input.value.trim();
             if(!text || !activeId) return;
 
             const res = await fetch(`${API_BASE}/Message/send`, {
@@ -252,8 +280,8 @@
             });
 
             if(res.ok) {
-                renderMessage("Ben", text, true);
-                if(!contentOverride) document.getElementById("messageInput").value = "";
+                renderMessage("Ben", text, true, null, true);
+                if(!contentOverride) input.value = "";
             }
         }
 
@@ -268,7 +296,6 @@
 
         function startCamera() { alert("Kamera özelliği geliştiriliyor!"); }
 
-        // --- Yardımcılar ---
         function escapeHtml(str) { return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }
         function showToast(msg) {
             const toast = document.createElement("div");
