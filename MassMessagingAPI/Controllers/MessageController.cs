@@ -70,27 +70,22 @@ namespace MassMessagingAPI.Controllers
             return Ok(new { Message = "Mesaj gönderildi." });
         }
 
+        // GetHistory metodunu bu şekilde güncelle:
         [HttpGet("history/{id}/{page}")]
-        public async Task<IActionResult> GetHistory(int id, int page = 1)
+        public async Task<IActionResult> GetHistory(string id, int page = 1)
         {
             int pageSize = 20;
             var myId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            bool isGroup = int.TryParse(id, out int groupId);
 
-            // !m.IsDeleted filtresi eklendi (Silinenler gelmeyecek)
-            var messages = await _context.Messages
-                .Where(m => m.GroupId == id && !m.IsDeleted)
-                .OrderByDescending(m => m.SentDate)
-                .Skip((page - 1) * pageSize)
-                .Take(pageSize)
-                .OrderBy(m => m.SentDate)
-                .Select(m => new {
-                    m.Id,
-                    m.Content,
-                    m.SentDate,
-                    m.IsEdited,
-                    SenderName = m.Sender.FirstName + " " + m.Sender.LastName,
-                    IsMine = m.SenderId == myId
-                })
+            // !m.IsDeleted filtresi burada kritik!
+            var query = _context.Messages.Where(m => !m.IsDeleted).Include(m => m.Sender).AsQueryable();
+
+            if (isGroup) query = query.Where(m => m.GroupId == groupId);
+            else query = query.Where(m => (m.SenderId == myId && m.ReceiverId == id) || (m.SenderId == id && m.ReceiverId == myId));
+
+            var messages = await query.OrderByDescending(m => m.SentDate).Skip((page - 1) * pageSize).Take(pageSize).OrderBy(m => m.SentDate)
+                .Select(m => new { m.Id, m.Content, m.SentDate, m.IsEdited, SenderName = m.Sender.FirstName + " " + m.Sender.LastName, IsMine = m.SenderId == myId })
                 .ToListAsync();
 
             return Ok(messages);

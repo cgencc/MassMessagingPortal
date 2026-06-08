@@ -110,7 +110,7 @@
                                         <tr>
                                             <th>Ad Soyad</th>
                                             <th>E-posta Adresi</th>
-                                            <th class="text-center">Durum</th>
+                                            <th class="text-center">Roller</th>
                                             <th class="text-center">İşlemler</th>
                                         </tr>
                                     </thead>
@@ -156,7 +156,6 @@
         document.addEventListener("DOMContentLoaded", () => {
             if(!token) { window.location.href = "/Auth/Login"; return; }
 
-            // Admin Yetki Kontrolü
             try {
                 const base64Url = token.split('.')[1];
                 const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
@@ -182,7 +181,7 @@
             return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
         }
 
-        // Kullanıcıları Listeleme
+        // Kullanıcıları ve rollerini listele
         async function loadUsers() {
             try {
                 const response = await fetch(`${API_BASE}/Admin/users`, { headers: { "Authorization": `Bearer ${token}` }});
@@ -192,38 +191,48 @@
                     if(users.length === 0) {
                         html = `<tr><td colspan="4" class="text-center text-muted p-4">Kayıtlı kullanıcı bulunamadı.</td></tr>`;
                     } else {
-                        users.forEach(u => html += `
+                        users.forEach(u => {
+                            // Rolleri burada badge olarak oluşturuyoruz
+                            const roleBadges = u.roles ? u.roles.map(r => `<span class="badge bg-primary rounded-pill mx-1">${r}</span>`).join('') : '<span class="badge bg-secondary rounded-pill">User</span>';
+
+                            html += `
                             <tr>
                                 <td><div class="fw-bold">${escapeHtml(u.firstName)} ${escapeHtml(u.lastName)}</div></td>
                                 <td class="text-muted">${escapeHtml(u.email)}</td>
-                                <td class="text-center"><span class="badge bg-success-subtle text-success rounded-pill px-3">Aktif</span></td>
+                                <td class="text-center">${roleBadges}</td>
                                 <td class="text-center">
-                                    <button class="btn btn-sm btn-outline-warning me-2" onclick="grantAdmin('${u.id}')" title="Admin Yap"><i class="fa-solid fa-shield-halved"></i></button>
+                                    <button class="btn btn-sm btn-outline-warning me-1" onclick="grantAdmin('${u.id}')" title="Admin Yap"><i class="fa-solid fa-shield-halved"></i></button>
+                                    <button class="btn btn-sm btn-outline-secondary me-1" onclick="removeAdmin('${u.id}')" title="Yetkiyi Al"><i class="fa-solid fa-user-slash"></i></button>
                                     <button class="btn btn-sm btn-outline-danger" onclick="deleteUser('${u.id}')" title="Sil"><i class="fa-solid fa-trash"></i></button>
                                 </td>
-                            </tr>`);
+                            </tr>`;
+                        });
                     }
                     document.getElementById("usersTableBody").innerHTML = html;
-                } else {
-                    document.getElementById("usersTableBody").innerHTML = `<tr><td colspan="4" class="text-center text-danger p-4">Kullanıcılar yüklenemedi.</td></tr>`;
                 }
             } catch (error) { console.error("User Load Error:", error); }
         }
 
-        // Admin Yetkisi Verme
         async function grantAdmin(userId) {
-            if(!confirm("Bu kullanıcıya Admin yetkisi verilsin mi?")) return;
-            try {
-                const res = await fetch(`${API_BASE}/Admin/assign-role/${userId}/Admin`, {
-                    method: "POST",
-                    headers: { "Authorization": `Bearer ${token}` }
-                });
-                if(res.ok) { alert("Rol atandı!"); loadUsers(); }
-                else { alert("Hata: Rol atanamadı."); }
-            } catch(e) { console.error(e); }
+            if(!confirm("Admin yetkisi verilsin mi?")) return;
+            const res = await fetch(`${API_BASE}/Admin/assign-role/${userId}/Admin`, {
+                method: "POST",
+                headers: { "Authorization": `Bearer ${token}` }
+            });
+            if(res.ok) { alert("Rol atandı!"); loadUsers(); }
+            else { alert("Hata oluştu."); }
         }
 
-        // Kullanıcı Silme
+        async function removeAdmin(userId) {
+            if(!confirm("Admin yetkisi kaldırılsın mı?")) return;
+            const res = await fetch(`${API_BASE}/Admin/remove-role/${userId}/Admin`, {
+                method: "POST",
+                headers: { "Authorization": `Bearer ${token}` }
+            });
+            if(res.ok) { alert("Yetki alındı!"); loadUsers(); }
+            else { alert("Hata oluştu."); }
+        }
+
         async function deleteUser(id) {
             if(!confirm("Bu kullanıcıyı silmek istediğinize emin misiniz?")) return;
             try {
@@ -232,11 +241,10 @@
                     headers: { "Authorization": `Bearer ${token}` }
                 });
                 if(res.ok) { alert("Kullanıcı silindi."); loadUsers(); }
-                else { alert("Hata: Kullanıcı silinemedi."); }
+                else { alert("Hata: Kullanıcı silinemedi (FK kısıtlaması olabilir)."); }
             } catch(e) { console.error(e); }
         }
 
-        // Grup Listeleme
         async function loadGroups() {
             try {
                 const response = await fetch(`${API_BASE}/Group/list`, { headers: { "Authorization": `Bearer ${token}` }});
@@ -253,12 +261,10 @@
             } catch(error) { console.error("Group Load Error:", error); }
         }
 
-        // Grup Oluşturma
         async function createGroup() {
             const input = document.getElementById("newGroupName");
             const groupName = input.value.trim();
             if(!groupName) return alert("Lütfen bir grup adı girin!");
-
             try {
                 const res = await fetch(`${API_BASE}/Group/create`, {
                     method: "POST",
@@ -266,13 +272,13 @@
                     body: JSON.stringify({ name: groupName })
                 });
                 if(res.ok) {
-                    alert("Grup başarıyla oluşturuldu!");
+                    alert("Grup oluşturuldu!");
                     input.value = "";
                     loadGroups();
                 } else {
-                    alert("Grup oluşturulurken hata oluştu.");
+                    alert("Hata oluştu.");
                 }
-            } catch(e) { console.error("Group Create Error:", e); }
+            } catch(e) { console.error(e); }
         }
     </script>
-}
+}       

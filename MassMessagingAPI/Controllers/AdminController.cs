@@ -13,67 +13,55 @@ namespace MassMessagingAPI.Controllers
     public class AdminController : ControllerBase
     {
         private readonly UserManager<AppUser> _userManager;
-        private readonly RoleManager<IdentityRole> _roleManager; // Tanımlama eklendi
+        private readonly RoleManager<IdentityRole> _roleManager;
         private readonly AppDbContext _context;
 
-        public AdminController(
-            UserManager<AppUser> userManager,
-            RoleManager<IdentityRole> roleManager, // Constructor'a eklendi
-            AppDbContext context)
+        public AdminController(UserManager<AppUser> userManager, RoleManager<IdentityRole> roleManager, AppDbContext context)
         {
             _userManager = userManager;
-            _roleManager = roleManager; // Atama yapıldı
+            _roleManager = roleManager;
             _context = context;
         }
 
-        // GET: api/admin/users
         [HttpGet("users")]
         public async Task<IActionResult> GetAllUsers()
         {
-            var users = await _userManager.Users
-                .Select(u => new
-                {
-                    u.Id,
-                    u.FirstName,
-                    u.LastName,
-                    u.Email
-                })
-                .ToListAsync();
+            var users = await _userManager.Users.ToListAsync();
+            var userList = new List<object>();
 
-            return Ok(users);
+            foreach (var user in users)
+            {
+                var roles = await _userManager.GetRolesAsync(user);
+                userList.Add(new
+                {
+                    user.Id,
+                    user.FirstName,
+                    user.LastName,
+                    user.Email,
+                    Roles = roles // Rollere buradan erişiyoruz
+                });
+            }
+
+            return Ok(userList);
         }
 
-        // POST: api/admin/assign-role/{userId}/{role}
         [HttpPost("assign-role/{userId}/{role}")]
         public async Task<IActionResult> AssignRole(string userId, string role)
         {
             var user = await _userManager.FindByIdAsync(userId);
-            if (user == null) return NotFound("Kullanıcı bulunamadı.");
-
-            // Rolün var olup olmadığını kontrol et
-            if (!await _roleManager.RoleExistsAsync(role))
-            {
-                await _roleManager.CreateAsync(new IdentityRole(role));
-            }
-
-            // Rolü ata
-            var result = await _userManager.AddToRoleAsync(user, role);
-
-            if (result.Succeeded)
-                return Ok(new { message = "Rol atandı." });
-            else
-                return BadRequest(result.Errors);
+            if (user == null) return NotFound();
+            if (!await _roleManager.RoleExistsAsync(role)) await _roleManager.CreateAsync(new IdentityRole(role));
+            await _userManager.AddToRoleAsync(user, role);
+            return Ok();
         }
-        // --- SİLME VE YETKİ ALMA İÇİN GÜNCEL METOTLAR ---
 
         [HttpPost("remove-role/{userId}/{role}")]
         public async Task<IActionResult> RemoveRole(string userId, string role)
         {
             var user = await _userManager.FindByIdAsync(userId);
             if (user == null) return NotFound();
-
             await _userManager.RemoveFromRoleAsync(user, role);
-            return Ok(new { message = "Yetki başarıyla alındı." });
+            return Ok();
         }
 
         [HttpDelete("delete-user/{id}")]
@@ -82,16 +70,13 @@ namespace MassMessagingAPI.Controllers
             var user = await _userManager.FindByIdAsync(id);
             if (user == null) return NotFound();
 
-            // 1. Kullanıcının mesajlarını sil (FK hatasını engellemek için)
-            var userMessages = _context.Messages.Where(m => m.SenderId == id || m.ReceiverId == id);
-            _context.Messages.RemoveRange(userMessages);
-
-            // 2. Kullanıcıyı sil
-            var result = await _userManager.DeleteAsync(user);
-            if (!result.Succeeded) return BadRequest(result.Errors);
-
+            // Önce kullanıcının attığı mesajları temizle (FK Hatası almamak için)
+            var messages = _context.Messages.Where(m => m.SenderId == id || m.ReceiverId == id);
+            _context.Messages.RemoveRange(messages);
             await _context.SaveChangesAsync();
-            return Ok(new { message = "Kullanıcı ve verileri silindi." });
+
+            await _userManager.DeleteAsync(user);
+            return Ok();
         }
     }
 }
