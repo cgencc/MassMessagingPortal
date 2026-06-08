@@ -72,7 +72,6 @@
 </style>
 
 <div class="row g-0 mt-3" style="height: 85vh;">
-    <!-- Left Panel: contact/group list -->
     <div class="col-md-3 border-end bg-white d-flex flex-column">
         <div class="p-3 border-bottom bg-light fw-bold">
             <i class="fa-solid fa-comments text-primary me-2"></i>Sohbetler
@@ -80,17 +79,13 @@
         <div id="chatList" style="overflow-y:auto; flex:1;"></div>
     </div>
 
-    <!-- Right Panel: chat area -->
     <div class="col-md-9 d-flex flex-column bg-white">
-        <!-- Admin broadcast pin -->
         <div id="adminPin" class="alert alert-warning m-0 py-2 px-3" style="display:none; border-radius:0; font-size:0.85rem;"></div>
 
-        <!-- Chat header -->
         <div id="chatHeader" class="p-3 border-bottom bg-light fw-semibold text-muted" style="font-size:0.9rem;">
             Bir sohbet seçin
         </div>
 
-        <!-- Messages -->
         <div id="chatBox">
             <div id="chatEmptyState">
                 <i class="fa-solid fa-comments fa-2x mb-2 d-block"></i>
@@ -98,7 +93,6 @@
             </div>
         </div>
 
-        <!-- Input area -->
         <div class="p-2 border-top bg-light d-flex align-items-center gap-2">
             <input type="file" id="mediaInput" accept="image/*,video/*,.pdf" style="display:none" onchange="handleFileSelect(event)">
             <button class="btn btn-outline-secondary btn-sm" onclick="document.getElementById('mediaInput').click()" title="Dosya ekle">
@@ -122,53 +116,63 @@
         const HUB_URL    = "https://localhost:7124/chatHub";
         const token      = localStorage.getItem("JWToken");
 
-        // FIX #5: Redirect to login if no token
-        if (!token) { window.location.href = "/Auth/Login"; }
+        // FIX #5: Redirect to login if no token. (Buraya return koyduk ki arkada hata vermesin)
+        if (!token) {
+            window.location.href = "/Auth/Login";
+        } else {
+            initApp();
+        }
 
         let activeId   = null;
         let isGroup    = false;
         let activeName = "";
+        let connection = null;
 
-        // ── SignalR connection ────────────────────────────────────────────────────
-        const connection = new signalR.HubConnectionBuilder()
-            .withUrl(HUB_URL, { accessTokenFactory: () => token })
-            .withAutomaticReconnect()
-            .build();
+        async function initApp() {
+            // ── SignalR connection ────────────────────────────────────────────────────
+            connection = new signalR.HubConnectionBuilder()
+                .withUrl(HUB_URL, { accessTokenFactory: () => token })
+                .withAutomaticReconnect()
+                .build();
 
-        // Incoming DM
-        connection.on("ReceiveMessage", (senderId, senderName, content) => {
-            // Only show inline if this chat is currently open
-            if (!isGroup && activeId === senderId) {
-                renderMessage(senderName, content, false);
-            } else {
-                showToast(`📩 ${senderName}: ${content}`);
-            }
-        });
+            // Incoming DM
+            connection.on("ReceiveMessage", (senderId, senderName, content) => {
+                if (!isGroup && activeId === senderId) {
+                    renderMessage(senderName, content, false);
+                } else {
+                    showToast(`📩 ${senderName}: ${content}`);
+                }
+            });
 
-        // Incoming group message
-        connection.on("ReceiveGroupMessage", (groupName, senderName, content) => {
-            if (isGroup && activeName === groupName) {
-                renderMessage(senderName, content, false);
-            } else {
-                showToast(`👥 [${groupName}] ${senderName}: ${content}`);
-            }
-        });
+            // Incoming group message
+            connection.on("ReceiveGroupMessage", (groupName, senderName, content) => {
+                if (isGroup && activeName === groupName) {
+                    renderMessage(senderName, content, false);
+                } else {
+                    showToast(`👥 [${groupName}] ${senderName}: ${content}`);
+                }
+            });
 
-        // Admin broadcast
-        connection.on("ReceiveAdminMessage", (content) => {
-            const pin = document.getElementById("adminPin");
-            pin.innerHTML = `<i class='fa-solid fa-bullhorn me-2'></i><strong>Yönetici Duyurusu:</strong> ${content}`;
-            pin.style.display = "block";
-        });
+            // Admin broadcast
+            connection.on("ReceiveAdminMessage", (content) => {
+                const pin = document.getElementById("adminPin");
+                pin.innerHTML = `<i class='fa-solid fa-bullhorn me-2'></i><strong>Yönetici Duyurusu:</strong> ${content}`;
+                pin.style.display = "block";
+            });
 
-        // Online status
-        connection.on("UserStatusChanged", (userId, isOnline) => {
-            const el = document.querySelector(`[data-uid="${userId}"] .status-dot`);
-            if (el) {
-                el.style.backgroundColor = isOnline ? "#22c55e" : "#d1d5db";
-                el.title = isOnline ? "Çevrimiçi" : "Çevrimdışı";
-            }
-        });
+            // Online status
+            connection.on("UserStatusChanged", (userId, isOnline) => {
+                const el = document.querySelector(`[data-uid="${userId}"] .status-dot`);
+                if (el) {
+                    el.style.backgroundColor = isOnline ? "#22c55e" : "#d1d5db";
+                    el.title = isOnline ? "Çevrimiçi" : "Çevrimdışı";
+                }
+            });
+
+            // ── Boot ─────────────────────────────────────────────────────────────────
+            await loadLists();
+            await startHub();
+        }
 
         async function startHub() {
             try {
@@ -180,53 +184,61 @@
             }
         }
 
-        // ── Boot ─────────────────────────────────────────────────────────────────
-        document.addEventListener("DOMContentLoaded", async () => {
-            await loadLists();
-            await startHub();
-        });
-
         // ── Load users + groups into sidebar ─────────────────────────────────────
         async function loadLists() {
             const list = document.getElementById("chatList");
             list.innerHTML = `<div class="text-center p-3"><div class="spinner-border spinner-border-sm text-primary"></div></div>`;
 
-            const [uRes, gRes] = await Promise.all([
-                fetch(`${API_BASE}/User/list`,  { headers: authHeader() }),
-                fetch(`${API_BASE}/Group/list`, { headers: authHeader() })
-            ]);
+            try {
+                const [uRes, gRes] = await Promise.all([
+                    fetch(`${API_BASE}/User/list`,  { headers: authHeader() }),
+                    fetch(`${API_BASE}/Group/list`, { headers: authHeader() })
+                ]);
 
-            const users  = uRes.ok  ? await uRes.json()  : [];
-            const groups = gRes.ok  ? await gRes.json()  : [];
+                // API eğer 404 dönerse sayfayı kitlememesi için güvenli çekim
+                const users  = uRes.ok  ? await uRes.json()  : [];
+                const groups = gRes.ok  ? await gRes.json()  : [];
 
-            list.innerHTML = "";
+                list.innerHTML = "";
 
-            if (users.length === 0 && groups.length === 0) {
-                list.innerHTML = `<div class="text-muted text-center p-3 small">Henüz kullanıcı veya grup yok.</div>`;
-                return;
-            }
+                if (users.length === 0 && groups.length === 0) {
+                    list.innerHTML = `<div class="text-muted text-center p-3 small">Henüz kullanıcı veya grup yok.</div>`;
+                    return;
+                }
 
-            if (users.length > 0) {
-                list.innerHTML += `<div class="px-3 pt-3 pb-1 text-uppercase text-muted" style="font-size:10px;font-weight:700;letter-spacing:1px;">Kullanıcılar</div>`;
-                users.forEach(u => {
-                    list.innerHTML += `
-                        <div class="chat-list-item" data-uid="${u.id}" onclick="startChat('${u.id}', false, this, '${escapeHtml(u.fullName)}')">
-                            <span class="status-dot d-inline-block rounded-circle me-2"
-                                  style="width:8px;height:8px;background:#d1d5db;vertical-align:middle;"
-                                  title="Çevrimdışı"></span>
-                            👤 ${escapeHtml(u.fullName)}
-                        </div>`;
-                });
-            }
+                let htmlContent = "";
 
-            if (groups.length > 0) {
-                list.innerHTML += `<div class="px-3 pt-3 pb-1 text-uppercase text-muted" style="font-size:10px;font-weight:700;letter-spacing:1px;">Gruplar</div>`;
-                groups.forEach(g => {
-                    list.innerHTML += `
-                        <div class="chat-list-item" onclick="startChat('${g.id}', true, this, '${escapeHtml(g.name)}')">
-                            👥 ${escapeHtml(g.name)}
-                        </div>`;
-                });
+                if (users.length > 0) {
+                    htmlContent += `<div class="px-3 pt-3 pb-1 text-uppercase text-muted" style="font-size:10px;font-weight:700;letter-spacing:1px;">Kullanıcılar</div>`;
+                    users.forEach(u => {
+                        // API u.fullName yerine u.firstName döndürüyorsa patlamasın diye koruma
+                        const name = u.fullName || u.firstName || "Kullanıcı";
+                        htmlContent += `
+                            <div class="chat-list-item" data-uid="${u.id}" onclick="startChat('${u.id}', false, this, '${escapeHtml(name)}')">
+                                <span class="status-dot d-inline-block rounded-circle me-2"
+                                      style="width:8px;height:8px;background:#d1d5db;vertical-align:middle;"
+                                      title="Çevrimdışı"></span>
+                                👤 ${escapeHtml(name)}
+                            </div>`;
+                    });
+                }
+
+                if (groups.length > 0) {
+                    htmlContent += `<div class="px-3 pt-3 pb-1 text-uppercase text-muted" style="font-size:10px;font-weight:700;letter-spacing:1px;">Gruplar</div>`;
+                    groups.forEach(g => {
+                        const name = g.name || "Grup";
+                        htmlContent += `
+                            <div class="chat-list-item" onclick="startChat('${g.id}', true, this, '${escapeHtml(name)}')">
+                                👥 ${escapeHtml(name)}
+                            </div>`;
+                    });
+                }
+
+                list.innerHTML = htmlContent;
+
+            } catch(e) {
+                console.error("Liste yüklenirken hata:", e);
+                list.innerHTML = `<div class="text-danger text-center p-3 small">Veriler yüklenemedi. API bağlantınızı kontrol edin.</div>`;
             }
         }
 
@@ -242,7 +254,7 @@
             activeName = name;
 
             document.querySelectorAll('.chat-list-item').forEach(el => el.classList.remove('active-chat'));
-            element.classList.add('active-chat');
+            if(element) element.classList.add('active-chat');
 
             document.getElementById("chatHeader").innerHTML =
                 `${group ? "👥" : "👤"} <span class="text-dark">${escapeHtml(name)}</span>`;
@@ -260,29 +272,31 @@
             const chatBox = document.getElementById("chatBox");
             chatBox.innerHTML = `<div class="text-center text-muted my-3"><div class="spinner-border spinner-border-sm"></div></div>`;
 
-            // FIX (Chat UI): Use different endpoints for DM vs group
-            const url = isGroup
-                ? `${API_BASE}/Message/history/group/${activeId}`
-                : `${API_BASE}/Message/history/${activeId}`;
+            // FIX: Gruplar için MessageController'da özel /history/group endpointi yoksa direkt id üzerinden history çek.
+            const url = `${API_BASE}/Message/history/${activeId}`;
 
-            const res = await fetch(url, { headers: authHeader() });
+            try {
+                const res = await fetch(url, { headers: authHeader() });
 
-            chatBox.innerHTML = "";
+                chatBox.innerHTML = "";
 
-            if (!res.ok) {
-                chatBox.innerHTML = `<div id="chatEmptyState">Mesajlar yüklenemedi.</div>`;
-                return;
+                if (!res.ok) {
+                    chatBox.innerHTML = `<div id="chatEmptyState">Mesajlar yüklenemedi.</div>`;
+                    return;
+                }
+
+                const msgs = await res.json();
+
+                if (msgs.length === 0) {
+                    chatBox.innerHTML = `<div id="chatEmptyState"><i class="fa-solid fa-comment-slash fa-2x mb-2 d-block"></i>Henüz mesaj yok. İlk mesajı siz gönderin!</div>`;
+                    return;
+                }
+
+                msgs.forEach(m => renderMessage(m.senderName, m.content, m.isMine, m.sentDate));
+                chatBox.scrollTop = chatBox.scrollHeight;
+            } catch(e) {
+                chatBox.innerHTML = `<div id="chatEmptyState">Sohbet yüklenirken bir hata oluştu.</div>`;
             }
-
-            const msgs = await res.json();
-
-            if (msgs.length === 0) {
-                chatBox.innerHTML = `<div id="chatEmptyState"><i class="fa-solid fa-comment-slash fa-2x mb-2 d-block"></i>Henüz mesaj yok. İlk mesajı siz gönderin!</div>`;
-                return;
-            }
-
-            msgs.forEach(m => renderMessage(m.senderName, m.content, m.isMine, m.sentDate));
-            chatBox.scrollTop = chatBox.scrollHeight;
         }
 
         // ── Render a single message bubble ────────────────────────────────────────
@@ -317,22 +331,25 @@
 
             const payload = {
                 content: text,
-                ...(isGroup
-                    ? { groupId: parseInt(activeId) }
-                    : { receiverId: activeId })
+                ...(isGroup ? { groupId: parseInt(activeId) } : { receiverId: activeId })
             };
 
-            const res = await fetch(`${API_BASE}/Message/send`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json", ...authHeader() },
-                body: JSON.stringify(payload)
-            });
+            try {
+                const res = await fetch(`${API_BASE}/Message/send`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", ...authHeader() },
+                    body: JSON.stringify(payload)
+                });
 
-            if (res.ok) {
-                renderMessage("Ben", text, true);
-                if (!contentOverride) input.value = "";
-            } else {
-                alert("Mesaj gönderilemedi!");
+                if (res.ok) {
+                    // MESAJIN ANLIK DÜŞMESİNİ SAĞLAYAN SATIR BURASI
+                    renderMessage("Ben", text, true);
+                    if (!contentOverride) input.value = "";
+                } else {
+                    alert("Mesaj gönderilemedi!");
+                }
+            } catch(e) {
+                console.error(e);
             }
         }
 
@@ -344,22 +361,28 @@
             const formData = new FormData();
             formData.append("file", file);
 
-            const res = await fetch(`${API_BASE}/Message/upload-file`, {
-                method: "POST",
-                headers: authHeader(),
-                body: formData
-            });
+            try {
+                const res = await fetch(`${API_BASE}/Message/upload-file`, {
+                    method: "POST",
+                    headers: authHeader(),
+                    body: formData
+                });
 
-            if (res.ok) {
-                const data = await res.json();
-                const ext = file.name.split('.').pop().toLowerCase();
-                const content = ["jpg","png","gif","webp"].includes(ext)
-                    ? `<img src="${data.url}" style="max-width:200px;border-radius:8px;">`
-                    : `<a href="${data.url}" target="_blank">📎 ${escapeHtml(file.name)}</a>`;
-                await sendMessage(content);
-            } else {
-                alert("Dosya yüklenemedi!");
+                if (res.ok) {
+                    const data = await res.json();
+                    const ext = file.name.split('.').pop().toLowerCase();
+                    const content = ["jpg","png","gif","webp"].includes(ext)
+                        ? `<img src="${data.url}" style="max-width:200px;border-radius:8px;">`
+                        : `<a href="${data.url}" target="_blank">📎 ${escapeHtml(file.name)}</a>`;
+
+                    await sendMessage(content);
+                } else {
+                    alert("Dosya yüklenemedi! API'de upload-file adresi var mı?");
+                }
+            } catch (error) {
+                console.error("Yükleme hatası:", error);
             }
+
             // Reset input so same file can be re-selected
             e.target.value = "";
         }
