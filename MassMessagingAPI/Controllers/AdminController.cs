@@ -13,11 +13,16 @@ namespace MassMessagingAPI.Controllers
     public class AdminController : ControllerBase
     {
         private readonly UserManager<AppUser> _userManager;
+        private readonly RoleManager<IdentityRole> _roleManager; // Tanımlama eklendi
         private readonly AppDbContext _context;
 
-        public AdminController(UserManager<AppUser> userManager, AppDbContext context)
+        public AdminController(
+            UserManager<AppUser> userManager,
+            RoleManager<IdentityRole> roleManager, // Constructor'a eklendi
+            AppDbContext context)
         {
             _userManager = userManager;
+            _roleManager = roleManager; // Atama yapıldı
             _context = context;
         }
 
@@ -38,18 +43,55 @@ namespace MassMessagingAPI.Controllers
             return Ok(users);
         }
 
-        // DELETE: api/admin/delete-user/{id}
+        // POST: api/admin/assign-role/{userId}/{role}
+        [HttpPost("assign-role/{userId}/{role}")]
+        public async Task<IActionResult> AssignRole(string userId, string role)
+        {
+            var user = await _userManager.FindByIdAsync(userId);
+            if (user == null) return NotFound("Kullanıcı bulunamadı.");
+
+            // Rolün var olup olmadığını kontrol et
+            if (!await _roleManager.RoleExistsAsync(role))
+            {
+                await _roleManager.CreateAsync(new IdentityRole(role));
+            }
+
+            // Rolü ata
+            var result = await _userManager.AddToRoleAsync(user, role);
+
+            if (result.Succeeded)
+                return Ok(new { message = "Rol atandı." });
+            else
+                return BadRequest(result.Errors);
+        }
+        // --- SİLME VE YETKİ ALMA İÇİN GÜNCEL METOTLAR ---
+
+        [HttpPost("remove-role/{userId}/{role}")]
+        public async Task<IActionResult> RemoveRole(string userId, string role)
+        {
+            var user = await _userManager.FindByIdAsync(userId);
+            if (user == null) return NotFound();
+
+            await _userManager.RemoveFromRoleAsync(user, role);
+            return Ok(new { message = "Yetki başarıyla alındı." });
+        }
+
         [HttpDelete("delete-user/{id}")]
         public async Task<IActionResult> DeleteUser(string id)
         {
-            var user = await _context.Users.FindAsync(id);
-            if (user == null)
-                return NotFound(new { message = "Kullanıcı bulunamadı." });
+            var user = await _userManager.FindByIdAsync(id);
+            if (user == null) return NotFound();
 
-            _context.Users.Remove(user);
+            // 1. Kullanıcının mesajlarını sil (FK hatasını engellemek için)
+            var userMessages = _context.Messages.Where(m => m.SenderId == id || m.ReceiverId == id);
+            _context.Messages.RemoveRange(userMessages);
+
+            // 2. Kullanıcıyı sil
+            var result = await _userManager.DeleteAsync(user);
+            if (!result.Succeeded) return BadRequest(result.Errors);
+
             await _context.SaveChangesAsync();
-
-            return Ok(new { message = "Kullanıcı başarıyla silindi." });
+            return Ok(new { message = "Kullanıcı ve verileri silindi." });
         }
     }
 }

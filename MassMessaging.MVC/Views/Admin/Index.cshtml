@@ -182,7 +182,7 @@
             return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
         }
 
-        // Kullanıcı Listeleme ve İşlemler
+        // Kullanıcıları Listeleme
         async function loadUsers() {
             try {
                 const response = await fetch(`${API_BASE}/Admin/users`, { headers: { "Authorization": `Bearer ${token}` }});
@@ -204,28 +204,36 @@
                             </tr>`);
                     }
                     document.getElementById("usersTableBody").innerHTML = html;
+                } else {
+                    document.getElementById("usersTableBody").innerHTML = `<tr><td colspan="4" class="text-center text-danger p-4">Kullanıcılar yüklenemedi.</td></tr>`;
                 }
             } catch (error) { console.error("User Load Error:", error); }
         }
 
+        // Admin Yetkisi Verme
         async function grantAdmin(userId) {
             if(!confirm("Bu kullanıcıya Admin yetkisi verilsin mi?")) return;
-            const res = await fetch(`${API_BASE}/Admin/assign-role/${userId}/Admin`, {
-                method: "POST",
-                headers: { "Authorization": `Bearer ${token}` }
-            });
-            if(res.ok) { alert("Rol atandı!"); loadUsers(); }
-            else { alert("Hata: Rol atanamadı."); }
+            try {
+                const res = await fetch(`${API_BASE}/Admin/assign-role/${userId}/Admin`, {
+                    method: "POST",
+                    headers: { "Authorization": `Bearer ${token}` }
+                });
+                if(res.ok) { alert("Rol atandı!"); loadUsers(); }
+                else { alert("Hata: Rol atanamadı."); }
+            } catch(e) { console.error(e); }
         }
 
+        // Kullanıcı Silme
         async function deleteUser(id) {
             if(!confirm("Bu kullanıcıyı silmek istediğinize emin misiniz?")) return;
-            const res = await fetch(`${API_BASE}/Admin/delete-user/${id}`, {
-                method: "DELETE",
-                headers: { "Authorization": `Bearer ${token}` }
-            });
-            if(res.ok) { alert("Kullanıcı silindi."); loadUsers(); }
-            else { alert("Hata: Kullanıcı silinemedi."); }
+            try {
+                const res = await fetch(`${API_BASE}/Admin/delete-user/${id}`, {
+                    method: "DELETE",
+                    headers: { "Authorization": `Bearer ${token}` }
+                });
+                if(res.ok) { alert("Kullanıcı silindi."); loadUsers(); }
+                else { alert("Hata: Kullanıcı silinemedi."); }
+            } catch(e) { console.error(e); }
         }
 
         // Grup Listeleme
@@ -245,6 +253,7 @@
             } catch(error) { console.error("Group Load Error:", error); }
         }
 
+        // Grup Oluşturma
         async function createGroup() {
             const input = document.getElementById("newGroupName");
             const groupName = input.value.trim();

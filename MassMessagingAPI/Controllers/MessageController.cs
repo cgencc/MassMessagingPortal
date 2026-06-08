@@ -38,7 +38,6 @@ namespace MassMessagingAPI.Controllers
         {
             var senderId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             var senderName = User.FindFirst("FirstName")?.Value;
-
             if (senderId == null) return Unauthorized("Kullanıcı bulunamadı.");
 
             var message = new Message
@@ -47,7 +46,8 @@ namespace MassMessagingAPI.Controllers
                 SenderId = senderId,
                 ReceiverId = model.ReceiverId,
                 GroupId = model.GroupId,
-                SentDate = DateTime.Now
+                SentDate = DateTime.Now,
+                IsDeleted = false
             };
 
             await _messageRepository.AddAsync(message);
@@ -70,29 +70,15 @@ namespace MassMessagingAPI.Controllers
             return Ok(new { Message = "Mesaj gönderildi." });
         }
 
-        // --- HATA DÜZELTİLDİ: int id yerine string id kabul ediyoruz ---
         [HttpGet("history/{id}/{page}")]
-        public async Task<IActionResult> GetHistory(string id, int page = 1)
+        public async Task<IActionResult> GetHistory(int id, int page = 1)
         {
             int pageSize = 20;
             var myId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-            bool isGroup = int.TryParse(id, out int groupId);
 
-            // Query'yi başlat
-            var query = _context.Messages.Include(m => m.Sender).AsQueryable();
-
-            if (isGroup)
-            {
-                query = query.Where(m => m.GroupId == groupId);
-            }
-            else
-            {
-                // Kullanıcı ise Sender ve Receiver eşleşmesine bak
-                query = query.Where(m => (m.SenderId == myId && m.ReceiverId == id) ||
-                                         (m.SenderId == id && m.ReceiverId == myId));
-            }
-
-            var messages = await query
+            // !m.IsDeleted filtresi eklendi (Silinenler gelmeyecek)
+            var messages = await _context.Messages
+                .Where(m => m.GroupId == id && !m.IsDeleted)
                 .OrderByDescending(m => m.SentDate)
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
@@ -110,24 +96,36 @@ namespace MassMessagingAPI.Controllers
             return Ok(messages);
         }
 
-        [HttpGet("history/group/{groupId}")]
-        public async Task<IActionResult> GetGroupMessageHistory(int groupId)
+        [HttpPut("edit")]
+        public async Task<IActionResult> EditMessage([FromBody] EditMessageDto dto)
         {
-            var myId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-            var messages = await _messageRepository.FindAsync(m => m.GroupId == groupId, m => m.Sender!);
+            var msg = await _messageRepository.GetByIdAsync(dto.Id);
+            if (msg == null || msg.SenderId != User.FindFirst(ClaimTypes.NameIdentifier)?.Value)
+                return Unauthorized();
 
-            var result = messages.OrderBy(m => m.SentDate).Select(m => new
-            {
-                m.Id,
-                m.Content,
-                m.SentDate,
-                SenderName = m.Sender!.FirstName + " " + m.Sender.LastName,
-                IsMine = m.SenderId == myId
-            });
+            msg.Content = dto.Content;
+            msg.IsEdited = true;
 
-            return Ok(result);
+            await _messageRepository.UpdateAsync(msg);
+            await _context.SaveChangesAsync(); // Değişikliği garanti kaydet
+            return Ok();
         }
 
+        [HttpDelete("delete/{id}")]
+        public async Task<IActionResult> DeleteMessage(int id)
+        {
+            var msg = await _messageRepository.GetByIdAsync(id);
+            if (msg == null || msg.SenderId != User.FindFirst(ClaimTypes.NameIdentifier)?.Value)
+                return Unauthorized();
+
+            msg.IsDeleted = true; // Soft Delete
+
+            await _messageRepository.UpdateAsync(msg);
+            await _context.SaveChangesAsync(); // Silme işlemini kesinleştir
+            return Ok();
+        }
+
+        // Diğer metodlar...
         [HttpPut("mark-as-read/{messageId}")]
         public async Task<IActionResult> MarkAsRead(int messageId)
         {
@@ -135,6 +133,7 @@ namespace MassMessagingAPI.Controllers
             if (message == null) return NotFound();
             message.IsRead = true;
             await _messageRepository.UpdateAsync(message);
+            await _context.SaveChangesAsync();
             return Ok();
         }
 
@@ -149,37 +148,6 @@ namespace MassMessagingAPI.Controllers
             var path = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot/uploads", fileName);
             using (var stream = new FileStream(path, FileMode.Create)) await file.CopyToAsync(stream);
             return Ok(new { url = "/uploads/" + fileName });
-        }
-
-        [HttpPost("send-admin")]
-        [Authorize(Roles = "Admin")]
-        public async Task<IActionResult> SendAdminMessage([FromBody] string content)
-        {
-            await _hubContext.Clients.All.SendAsync("ReceiveAdminMessage", content);
-            return Ok();
-        }
-
-        [HttpPut("edit")]
-        public async Task<IActionResult> EditMessage([FromBody] EditMessageDto dto)
-        {
-            var msg = await _messageRepository.GetByIdAsync(dto.Id);
-            if (msg == null || msg.SenderId != User.FindFirst(ClaimTypes.NameIdentifier)?.Value) return Unauthorized();
-
-            msg.Content = dto.Content;
-            msg.IsEdited = true;
-            await _messageRepository.UpdateAsync(msg);
-            return Ok();
-        }
-
-        [HttpDelete("delete/{id}")]
-        public async Task<IActionResult> DeleteMessage(int id)
-        {
-            var msg = await _messageRepository.GetByIdAsync(id);
-            if (msg == null || msg.SenderId != User.FindFirst(ClaimTypes.NameIdentifier)?.Value) return Unauthorized();
-
-            msg.IsDeleted = true;
-            await _messageRepository.UpdateAsync(msg);
-            return Ok();
         }
     }
 }
