@@ -64,6 +64,18 @@
         margin-top: 3px;
     }
 
+    .msg-actions {
+        opacity: 0.7;
+        font-size: 0.8rem;
+    }
+
+        .msg-actions button {
+            border: none;
+            background: none;
+            padding: 0 5px;
+            color: #555;
+        }
+
     #chatEmptyState {
         color: #aaa;
         text-align: center;
@@ -125,9 +137,7 @@
         if (!token) window.location.href = "/Auth/Login";
 
         document.addEventListener("DOMContentLoaded", async () => {
-            // Bildirim izni iste
             if (Notification.permission !== "granted") Notification.requestPermission();
-
             if (token) await initApp();
         });
 
@@ -136,20 +146,16 @@
                 .withUrl(HUB_URL, { accessTokenFactory: () => token })
                 .withAutomaticReconnect().build();
 
-            // Mesaj alma ve Bildirim tetikleme
+            // Hub Dinleyicileri
             connection.on("ReceiveMessage", (sId, sName, content) => {
-                if (document.hidden && activeId !== sId) {
-                    new Notification("Yeni Mesaj!", { body: `${sName}: ${content}`, icon: "/favicon.ico" });
-                }
-                if (!isGroup && activeId === sId) renderMessage(sName, content, false, null, true);
+                if (document.hidden && activeId !== sId) new Notification("Yeni Mesaj!", { body: `${sName}: ${content}` });
+                if (!isGroup && activeId === sId) renderMessage(sName, content, false, null, null, true);
                 else showToast(`📩 ${sName}: ${content}`);
             });
 
             connection.on("ReceiveGroupMessage", (gName, sName, content) => {
-                if (document.hidden && activeName !== gName) {
-                    new Notification(`Yeni Mesaj: ${gName}`, { body: `${sName}: ${content}`, icon: "/favicon.ico" });
-                }
-                if (isGroup && activeName === gName) renderMessage(sName, content, false, null, true);
+                if (document.hidden && activeName !== gName) new Notification(`Yeni Mesaj: ${gName}`, { body: `${sName}: ${content}` });
+                if (isGroup && activeName === gName) renderMessage(sName, content, false, null, null, true);
                 else showToast(`👥 [${gName}] ${sName}: ${content}`);
             });
 
@@ -186,7 +192,6 @@
         async function loadLists() {
             const list = document.getElementById("chatList");
             list.innerHTML = `<div class="text-center p-3"><div class="spinner-border spinner-border-sm text-primary"></div></div>`;
-
             try {
                 const [uRes, gRes] = await Promise.all([
                     fetch(`${API_BASE}/User/list`, { headers: { "Authorization": `Bearer ${token}` } }),
@@ -216,58 +221,56 @@
             loadHistory(id);
         }
 
-        // --- Sonsuz Kaydırma ile Mesaj Geçmişi ---
+        // --- Mesaj Geçmişi (Sonsuz Kaydırma) ---
         async function loadHistory(id, isLoadMore = false) {
             if (isLoading || (!hasMore && isLoadMore)) return;
             isLoading = true;
-
             const chatBox = document.getElementById("chatBox");
             if (!isLoadMore) chatBox.innerHTML = '<div class="text-center p-3 text-muted">Yükleniyor...</div>';
-
             try {
-                const res = await fetch(`${API_BASE}/Message/history/${id}/${currentPage}`, {
-                    headers: { "Authorization": `Bearer ${token}` }
-                });
+                const res = await fetch(`${API_BASE}/Message/history/${id}/${currentPage}`, { headers: { "Authorization": `Bearer ${token}` } });
                 const msgs = await res.json();
-
                 if (msgs.length === 0) { hasMore = false; isLoading = false; if(!isLoadMore) chatBox.innerHTML = ""; return; }
-
                 if (!isLoadMore) chatBox.innerHTML = "";
-                msgs.forEach(m => renderMessage(m.senderName, m.content, m.isMine, m.sentDate, !isLoadMore));
+                msgs.forEach(m => renderMessage(m.senderName, m.content, m.isMine, m.sentDate, m.id, !isLoadMore));
                 currentPage++;
             } catch(e) { chatBox.innerHTML = '<div class="text-center p-3 text-danger">Hata!</div>'; }
             isLoading = false;
         }
 
-        // Scroll dinleyicisi
         document.getElementById("chatBox").addEventListener("scroll", function() {
             if (this.scrollTop === 0 && !isLoading && hasMore) loadHistory(activeId, true);
         });
 
-        // --- Mesaj Çizim ---
-        function renderMessage(name, content, isMine, sentDate = null, toBottom = true) {
+        // --- Mesaj Çizim & Aksiyonlar ---
+        function renderMessage(name, content, isMine, sentDate = null, messageId = null, toBottom = true) {
             const chatBox = document.getElementById("chatBox");
-            const empty = document.getElementById("chatEmptyState");
-            if (empty) empty.remove();
+            document.getElementById("chatEmptyState")?.remove();
 
             const timeStr = sentDate ? new Date(sentDate).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" }) : "";
-            const bubbleClass = (isMine === true || isMine === "true") ? 'msg-me' : 'msg-other';
+            const isMe = (isMine === true || isMine === "true");
+            const bubbleClass = isMe ? 'msg-me' : 'msg-other';
+
+            // Düzenle/Sil Butonları (Sadece kendi mesajlarımıza)
+            const actions = isMe ? `
+                <div class="d-flex gap-2 justify-content-end msg-actions">
+                    <button onclick="editMsg(${messageId}, '${escapeHtml(content)}')" class="text-dark"><i class="fa-solid fa-pen-to-square"></i></button>
+                    <button onclick="deleteMsg(${messageId})" class="text-danger"><i class="fa-solid fa-trash"></i></button>
+                </div>` : "";
+
             const msgHtml = `
                 <div class="msg-bubble ${bubbleClass}">
-                    ${!isMine ? `<span class="msg-sender">${escapeHtml(name)}</span>` : ""}
-                    ${content}
+                    ${!isMe ? `<span class="msg-sender">${escapeHtml(name)}</span>` : ""}
+                    <div id="msg-content-${messageId}">${content}</div>
+                    ${actions}
                     <span class="msg-time">${timeStr}</span>
                 </div>`;
 
-            if (toBottom) {
-                chatBox.innerHTML += msgHtml;
-                chatBox.scrollTop = chatBox.scrollHeight;
-            } else {
-                chatBox.insertAdjacentHTML('afterbegin', msgHtml);
-            }
+            if (toBottom) { chatBox.innerHTML += msgHtml; chatBox.scrollTop = chatBox.scrollHeight; }
+            else { chatBox.insertAdjacentHTML('afterbegin', msgHtml); }
         }
 
-        // --- Mesaj Gönder ---
+        // --- Mesaj İşlemleri ---
         async function sendMessage(contentOverride = null) {
             const input = document.getElementById("messageInput");
             const text = contentOverride || input.value.trim();
@@ -278,14 +281,36 @@
                 headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
                 body: JSON.stringify({ content: text, [isGroup ? 'groupId' : 'receiverId']: isGroup ? parseInt(activeId) : activeId })
             });
-
             if(res.ok) {
-                renderMessage("Ben", text, true, null, true);
+                renderMessage("Ben", text, true, null, null, true);
                 if(!contentOverride) input.value = "";
             }
         }
 
-        // --- Dosya Yükleme ---
+        async function deleteMsg(id) {
+            if (!confirm("Silmek istediğine emin misin?")) return;
+            const res = await fetch(`${API_BASE}/Message/delete/${id}`, { method: "DELETE", headers: { "Authorization": `Bearer ${token}` } });
+            if (res.ok) {
+                const el = document.getElementById(`msg-content-${id}`)?.closest('.msg-bubble');
+                if(el) el.remove();
+                showToast("Mesaj silindi.");
+            }
+        }
+
+        async function editMsg(id, oldContent) {
+            const newContent = prompt("Mesajı düzenle:", oldContent);
+            if (!newContent || newContent === oldContent) return;
+            const res = await fetch(`${API_BASE}/Message/edit`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+                body: JSON.stringify({ id: id, content: newContent })
+            });
+            if (res.ok) {
+                document.getElementById(`msg-content-${id}`).innerText = newContent;
+                showToast("Mesaj güncellendi.");
+            }
+        }
+
         async function handleFileSelect(e) {
             const file = e.target.files[0];
             const formData = new FormData(); formData.append("file", file);
@@ -295,7 +320,6 @@
         }
 
         function startCamera() { alert("Kamera özelliği geliştiriliyor!"); }
-
         function escapeHtml(str) { return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }
         function showToast(msg) {
             const toast = document.createElement("div");

@@ -1,4 +1,4 @@
-﻿using MassMessagingAPI.Data; // AppDbContext için gerekli
+﻿using MassMessagingAPI.Data;
 using MassMessagingAPI.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
@@ -13,14 +13,15 @@ namespace MassMessagingAPI.Controllers
     public class AdminController : ControllerBase
     {
         private readonly UserManager<AppUser> _userManager;
-        private readonly AppDbContext _context; // Context tanımı eklendi
+        private readonly AppDbContext _context;
 
         public AdminController(UserManager<AppUser> userManager, AppDbContext context)
         {
             _userManager = userManager;
-            _context = context; // Enjeksiyon tamamlandı
+            _context = context;
         }
 
+        // GET: api/admin/users
         [HttpGet("users")]
         public async Task<IActionResult> GetAllUsers()
         {
@@ -37,15 +38,18 @@ namespace MassMessagingAPI.Controllers
             return Ok(users);
         }
 
+        // DELETE: api/admin/delete-user/{id}
         [HttpDelete("delete-user/{id}")]
         public async Task<IActionResult> DeleteUser(string id)
         {
             var user = await _context.Users.FindAsync(id);
-            if (user == null) return NotFound();
+            if (user == null)
+                return NotFound(new { message = "Kullanıcı bulunamadı." });
 
             _context.Users.Remove(user);
             await _context.SaveChangesAsync();
-            return Ok();
+
+            return Ok(new { message = "Kullanıcı başarıyla silindi." });
         }
     }
 }

@@ -6,27 +6,16 @@
     <title>@ViewData["Title"] - MassPortal</title>
     <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
-    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
-    <style>
-        .premium-navbar {
-            background: rgba(255, 255, 255, 0.95);
-            backdrop-filter: blur(10px);
-            border-bottom: 1px solid rgba(0,0,0,0.05);
-        }
-    </style>
+    <link rel="stylesheet" href="~/css/site.css" />
 </head>
 <body>
     <header>
-        <nav class="navbar navbar-expand-sm navbar-light premium-navbar shadow-sm mb-4 sticky-top">
+        <nav class="navbar navbar-expand-sm navbar-light bg-white border-bottom shadow-sm mb-4">
             <div class="container">
-                <a class="navbar-brand fw-bold text-primary" href="/Home/Index">
-                    <i class="fa-solid fa-paper-plane me-2"></i>MassPortal
-                </a>
-                <div class="navbar-collapse collapse d-sm-inline-flex justify-content-between">
+                <a class="navbar-brand fw-bold text-primary" href="/Home/Index"><i class="fa-solid fa-paper-plane me-2"></i>MassPortal</a>
+                <div class="navbar-collapse collapse">
                     <ul class="navbar-nav flex-grow-1">
-                        <li class="nav-item">
-                            <a class="nav-link fw-bold text-dark" href="/Home/Index">Ana Sayfa</a>
-                        </li>
+                        <li class="nav-item"><a class="nav-link fw-bold text-dark" href="/Home/Index">Ana Sayfa</a></li>
                     </ul>
                     <ul class="navbar-nav align-items-center" id="dynamicNav"></ul>
                 </div>
@@ -51,50 +40,19 @@
             if (token) {
                 let isAdmin = false;
                 try {
-                    const base64Url = token.split('.')[1];
-                    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-                    // UTF-8 karakter sorunlarını önlemek için decodeURIComponent kullanıyoruz:
-                    const jsonPayload = decodeURIComponent(window.atob(base64).split('').map(function(c) {
-                        return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
-                    }).join(''));
+                    const payload = JSON.parse(atob(token.split('.')[1]));
+                    const role = payload["http://schemas.microsoft.com/ws/2008/06/identity/claims/role"] || payload["role"];
+                    isAdmin = role === "Admin" || (Array.isArray(role) && role.includes("Admin"));
+                } catch (e) { localStorage.removeItem("JWToken"); }
 
-                    const payload = JSON.parse(jsonPayload);
-
-                    // .NET Claim'i veya standart 'role' alanı
-                    const roleClaim = payload["http://schemas.microsoft.com/ws/2008/06/identity/claims/role"] || payload["role"];
-
-                    if (roleClaim === "Admin" || (Array.isArray(roleClaim) && roleClaim.includes("Admin"))) {
-                        isAdmin = true;
-                    }
-                } catch (e) {
-                    console.error("Token deşifre edilemedi veya geçersiz", e);
-                    // Hatalı token ise localStorage'ı temizle
-                    localStorage.removeItem("JWToken");
-                    window.location.reload();
-                }
-
-                let navHtml = `
-                    <li class="nav-item me-2">
-                        <a class="nav-link fw-semibold text-dark" href="/Chat/Index"><i class="fa-solid fa-comments text-primary me-1"></i> Sohbetler</a>
-                    </li>`;
-
-                if (isAdmin) {
-                    navHtml += `
-                        <li class="nav-item me-2">
-                            <a class="nav-link fw-semibold text-dark" href="/Admin/Index"><i class="fa-solid fa-shield-halved text-danger me-1"></i> Yönetim Paneli</a>
-                        </li>`;
-                }
-
-                navHtml += `
-                    <li class="nav-item">
-                        <button onclick="logoutApp()" class="btn btn-outline-danger btn-sm rounded-pill px-3 fw-bold">Çıkış</button>
-                    </li>`;
-
-                dynamicNav.innerHTML = navHtml;
+                let html = `<li class="nav-item me-2"><a class="nav-link fw-semibold text-dark" href="/Chat/Index">Sohbetler</a></li>`;
+                if (isAdmin) html += `<li class="nav-item me-2"><a class="nav-link fw-semibold text-danger" href="/Admin/Index">Yönetim</a></li>`;
+                html += `<li class="nav-item"><button onclick="logoutApp()" class="btn btn-outline-danger btn-sm rounded-pill px-3">Çıkış</button></li>`;
+                dynamicNav.innerHTML = html;
             } else {
                 dynamicNav.innerHTML = `
-                    <li class="nav-item me-2"><a class="btn btn-light btn-sm rounded-pill px-3 fw-bold shadow-sm border" href="/Auth/Login">Giriş Yap</a></li>
-                    <li class="nav-item"><a class="btn btn-primary btn-sm rounded-pill px-3 fw-bold shadow-sm" href="/Auth/Register">Kayıt Ol</a></li>`;
+                    <li class="nav-item me-2"><a class="btn btn-outline-primary btn-sm rounded-pill px-3" href="/Auth/Login">Giriş</a></li>
+                    <li class="nav-item"><a class="btn btn-primary btn-sm rounded-pill px-3" href="/Auth/Register">Kayıt</a></li>`;
             }
         });
 

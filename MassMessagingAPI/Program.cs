@@ -25,7 +25,7 @@ builder.Services.AddIdentity<AppUser, IdentityRole>(options =>
 .AddEntityFrameworkStores<AppDbContext>()
 .AddDefaultTokenProviders();
 
-// 3. JWT Ayarlarý
+// 3. JWT ve SignalR Auth Ayarlarý
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -43,9 +43,24 @@ builder.Services.AddAuthentication(options =>
         ValidIssuer = builder.Configuration["Jwt:Issuer"],
         IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]!))
     };
+
+    // --- SignalR için kritik ekleme ---
+    options.Events = new JwtBearerEvents
+    {
+        OnMessageReceived = context =>
+        {
+            var accessToken = context.Request.Query["access_token"];
+            var path = context.HttpContext.Request.Path;
+            if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/chatHub"))
+            {
+                context.Token = accessToken;
+            }
+            return Task.CompletedTask;
+        }
+    };
 });
 
-// 4. Servis Kayýtlarý
+// 4. Servisler
 builder.Services.AddSignalR();
 builder.Services.AddScoped(typeof(MassMessagingAPI.Repositories.IGenericRepository<>), typeof(MassMessagingAPI.Repositories.GenericRepository<>));
 builder.Services.AddScoped<MassMessagingAPI.Services.ITokenService, MassMessagingAPI.Services.TokenService>();
@@ -53,7 +68,6 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
-    c.SwaggerDoc("v1", new OpenApiInfo { Title = "Toplu Mesajlaþma API", Version = "v1" });
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         Name = "Authorization",
@@ -63,14 +77,11 @@ builder.Services.AddSwaggerGen(c =>
     });
     c.AddSecurityRequirement(new OpenApiSecurityRequirement
     {
-        {
-            new OpenApiSecurityScheme { Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "Bearer" } },
-            Array.Empty<string>()
-        }
+        { new OpenApiSecurityScheme { Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "Bearer" } }, Array.Empty<string>() }
     });
 });
 
-// 5. CORS Ayarlarý
+// 5. CORS
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAll", b => b.AllowAnyMethod().AllowAnyHeader().AllowCredentials().SetIsOriginAllowed(origin => true));
@@ -78,9 +89,6 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
-// --- MÝDDLEWARE SIRALAMASI (Burada app oluþturulduktan sonra çaðýrýyoruz) ---
-
-// Hata Yönetimi Middleware'i en baþa alýyoruz ki her hatayý yakalasýn
 app.UseMiddleware<MassMessagingAPI.Middlewares.ExceptionMiddleware>();
 
 if (app.Environment.IsDevelopment())
@@ -90,7 +98,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
-app.UseStaticFiles(); // Dýþarýdan uploads klasörüne eriþimi açar
+app.UseStaticFiles();
 app.UseCors("AllowAll");
 app.UseAuthentication();
 app.UseAuthorization();
@@ -102,15 +110,8 @@ app.MapHub<MassMessagingAPI.Hubs.ChatHub>("/chathub");
 using (var scope = app.Services.CreateScope())
 {
     var services = scope.ServiceProvider;
-    try
-    {
-        await MassMessagingAPI.Data.SeedData.InitializeAsync(services);
-    }
-    catch (Exception ex)
-    {
-        var logger = services.GetRequiredService<ILogger<Program>>();
-        logger.LogError(ex, "Veritabaný baþlangýç verileri yüklenirken hata oluþtu.");
-    }
+    try { await MassMessagingAPI.Data.SeedData.InitializeAsync(services); }
+    catch (Exception ex) { var logger = services.GetRequiredService<ILogger<Program>>(); logger.LogError(ex, "SeedData hatasý."); }
 }
 
 app.Run();

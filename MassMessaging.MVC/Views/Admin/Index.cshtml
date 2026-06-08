@@ -111,10 +111,11 @@
                                             <th>Ad Soyad</th>
                                             <th>E-posta Adresi</th>
                                             <th class="text-center">Durum</th>
+                                            <th class="text-center">İşlemler</th>
                                         </tr>
                                     </thead>
                                     <tbody id="usersTableBody">
-                                        <tr><td colspan="3" class="text-center p-4"><div class="spinner-grow text-primary"></div></td></tr>
+                                        <tr><td colspan="4" class="text-center p-4"><div class="spinner-grow text-primary"></div></td></tr>
                                     </tbody>
                                 </table>
                             </div>
@@ -152,12 +153,8 @@
         const API_BASE = "https://localhost:7124/api";
         const token = localStorage.getItem("JWToken");
 
-        // 1. Sayfa yüklendiğinde yetkiyi kontrol et
         document.addEventListener("DOMContentLoaded", () => {
-            if(!token) {
-                window.location.href = "/Auth/Login";
-                return;
-            }
+            if(!token) { window.location.href = "/Auth/Login"; return; }
 
             // Admin Yetki Kontrolü
             try {
@@ -175,53 +172,63 @@
                     window.location.href = "/Home/Index";
                     return;
                 }
-            } catch (e) {
-                window.location.href = "/Auth/Login";
-                return;
-            }
+            } catch (e) { window.location.href = "/Auth/Login"; return; }
 
-            // Verileri yükle
             loadUsers();
             loadGroups();
         });
 
-        // 2. Güvenlik İçin XSS Koruması
         function escapeHtml(str) {
-            return String(str)
-                .replace(/&/g, "&amp;")
-                .replace(/</g, "&lt;")
-                .replace(/>/g, "&gt;")
-                .replace(/"/g, "&quot;");
+            return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
         }
 
-        // 3. Kullanıcıları Listele
+        // Kullanıcı Listeleme ve İşlemler
         async function loadUsers() {
             try {
                 const response = await fetch(`${API_BASE}/Admin/users`, { headers: { "Authorization": `Bearer ${token}` }});
                 if (response.ok) {
                     const users = await response.json();
                     let html = "";
-
                     if(users.length === 0) {
-                        html = `<tr><td colspan="3" class="text-center text-muted p-4">Kayıtlı kullanıcı bulunamadı.</td></tr>`;
+                        html = `<tr><td colspan="4" class="text-center text-muted p-4">Kayıtlı kullanıcı bulunamadı.</td></tr>`;
                     } else {
                         users.forEach(u => html += `
                             <tr>
                                 <td><div class="fw-bold">${escapeHtml(u.firstName)} ${escapeHtml(u.lastName)}</div></td>
                                 <td class="text-muted">${escapeHtml(u.email)}</td>
                                 <td class="text-center"><span class="badge bg-success-subtle text-success rounded-pill px-3">Aktif</span></td>
+                                <td class="text-center">
+                                    <button class="btn btn-sm btn-outline-warning me-2" onclick="grantAdmin('${u.id}')" title="Admin Yap"><i class="fa-solid fa-shield-halved"></i></button>
+                                    <button class="btn btn-sm btn-outline-danger" onclick="deleteUser('${u.id}')" title="Sil"><i class="fa-solid fa-trash"></i></button>
+                                </td>
                             </tr>`);
                     }
                     document.getElementById("usersTableBody").innerHTML = html;
-                } else {
-                    document.getElementById("usersTableBody").innerHTML = `<tr><td colspan="3" class="text-center text-danger p-4">Kullanıcılar yüklenemedi.</td></tr>`;
                 }
-            } catch (error) {
-                console.error("User Load Error:", error);
-            }
+            } catch (error) { console.error("User Load Error:", error); }
         }
 
-        // 4. Grupları Listele
+        async function grantAdmin(userId) {
+            if(!confirm("Bu kullanıcıya Admin yetkisi verilsin mi?")) return;
+            const res = await fetch(`${API_BASE}/Admin/assign-role/${userId}/Admin`, {
+                method: "POST",
+                headers: { "Authorization": `Bearer ${token}` }
+            });
+            if(res.ok) { alert("Rol atandı!"); loadUsers(); }
+            else { alert("Hata: Rol atanamadı."); }
+        }
+
+        async function deleteUser(id) {
+            if(!confirm("Bu kullanıcıyı silmek istediğinize emin misiniz?")) return;
+            const res = await fetch(`${API_BASE}/Admin/delete-user/${id}`, {
+                method: "DELETE",
+                headers: { "Authorization": `Bearer ${token}` }
+            });
+            if(res.ok) { alert("Kullanıcı silindi."); loadUsers(); }
+            else { alert("Hata: Kullanıcı silinemedi."); }
+        }
+
+        // Grup Listeleme
         async function loadGroups() {
             try {
                 const response = await fetch(`${API_BASE}/Group/list`, { headers: { "Authorization": `Bearer ${token}` }});
@@ -235,19 +242,13 @@
                         </li>`);
                     document.getElementById("groupListUI").innerHTML = html || "<li class='list-group-item text-muted text-center p-3'>Henüz grup oluşturulmamış.</li>";
                 }
-            } catch(error) {
-                console.error("Group Load Error:", error);
-            }
+            } catch(error) { console.error("Group Load Error:", error); }
         }
 
-        // 5. Grup Oluştur
         async function createGroup() {
             const input = document.getElementById("newGroupName");
             const groupName = input.value.trim();
-
-            if(!groupName) {
-                return alert("Lütfen bir grup adı girin!");
-            }
+            if(!groupName) return alert("Lütfen bir grup adı girin!");
 
             try {
                 const res = await fetch(`${API_BASE}/Group/create`, {
@@ -255,22 +256,14 @@
                     headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
                     body: JSON.stringify({ name: groupName })
                 });
-
-                const resDiv = document.getElementById("groupResult");
-
                 if(res.ok) {
-                    resDiv.className = "mt-2 small fw-bold text-success";
-                    resDiv.innerText = "Grup başarıyla oluşturuldu!";
+                    alert("Grup başarıyla oluşturuldu!");
                     input.value = "";
                     loadGroups();
-                    setTimeout(() => resDiv.innerText = "", 3000);
                 } else {
-                    resDiv.className = "mt-2 small fw-bold text-danger";
-                    resDiv.innerText = "Grup oluşturulurken hata oluştu.";
+                    alert("Grup oluşturulurken hata oluştu.");
                 }
-            } catch(e) {
-                console.error("Group Create Error:", e);
-            }
+            } catch(e) { console.error("Group Create Error:", e); }
         }
     </script>
-}x
+}
