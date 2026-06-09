@@ -1,14 +1,12 @@
 ﻿using MassMessagingAPI.Data;
-using MassMessagingAPI.Hubs;
 using MassMessagingAPI.Models;
+using MassMessagingAPI.Hubs;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
-using MassMessagingAPI.Hubs; // ChatHub'ın olduğu namespace
-using Microsoft.AspNetCore.SignalR;
 
 namespace MassMessagingAPI.Controllers
 {
@@ -21,7 +19,6 @@ namespace MassMessagingAPI.Controllers
         private readonly RoleManager<IdentityRole> _roleManager;
         private readonly AppDbContext _context;
         private readonly IHubContext<ChatHub> _hubContext;
-
 
         public AdminController(
             UserManager<AppUser> userManager,
@@ -77,19 +74,29 @@ namespace MassMessagingAPI.Controllers
             if (!result.Succeeded) return BadRequest(result.Errors);
             return Ok(new { Message = "Rol başarıyla kaldırıldı." });
         }
-        [Authorize(Roles = "Admin")]
+
         [HttpDelete("delete-group/{groupId}")]
         public async Task<IActionResult> DeleteGroup(int groupId)
         {
             var group = await _context.Groups.FindAsync(groupId);
-            if (group == null) return NotFound();
+            if (group == null) return NotFound(new { Message = "Grup bulunamadı." });
 
+            // ✅ FIX: Delete related records first to avoid FK constraint 500 error.
+            // 1. Remove all messages that belong to this group
+            var groupMessages = _context.Messages.Where(m => m.GroupId == groupId);
+            _context.Messages.RemoveRange(groupMessages);
+
+            // 2. Remove all UserGroup memberships for this group
+            var userGroups = _context.UserGroups.Where(ug => ug.GroupId == groupId);
+            _context.UserGroups.RemoveRange(userGroups);
+
+            // 3. Now safe to delete the group itself
             _context.Groups.Remove(group);
+
             await _context.SaveChangesAsync();
             return Ok(new { Message = "Grup başarıyla silindi." });
         }
 
-        [Authorize(Roles = "Admin")]
         [HttpDelete("remove-member/{groupId}/{userId}")]
         public async Task<IActionResult> RemoveMember(int groupId, string userId)
         {
@@ -99,7 +106,6 @@ namespace MassMessagingAPI.Controllers
             _context.UserGroups.Remove(userGroup);
             await _context.SaveChangesAsync();
 
-            // YENİ EKLENEN: Kullanıcıya gruptan atıldığını canlı olarak bildir!
             await _hubContext.Clients.User(userId).SendAsync("RemovedFromGroup", groupId);
 
             return Ok(new { Message = "Üye gruptan çıkarıldı." });
@@ -120,7 +126,6 @@ namespace MassMessagingAPI.Controllers
             return Ok(new { Message = "Kullanıcı silindi." });
         }
 
-        // ✅ NEW: Admin broadcasts an announcement to ALL connected users
         [HttpPost("broadcast")]
         public async Task<IActionResult> Broadcast([FromBody] BroadcastDto dto)
         {
@@ -132,10 +137,8 @@ namespace MassMessagingAPI.Controllers
         }
     }
 
-
     public class BroadcastDto
     {
         public string Message { get; set; } = string.Empty;
     }
-
 }

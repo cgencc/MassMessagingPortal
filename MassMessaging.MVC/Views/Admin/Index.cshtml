@@ -37,9 +37,25 @@
                 <div class="card-body p-4">
                     <div class="tab-content">
 
+                        <!-- ═══════════════════════════════════════════════════════ -->
+                        <!--  USERS TAB                                             -->
+                        <!-- ═══════════════════════════════════════════════════════ -->
                         <div class="tab-pane fade show active" id="users" role="tabpanel">
-                            <div class="d-flex justify-content-between align-items-center mb-3 bg-light p-3 rounded">
-                                <h6 class="fw-bold mb-0">Kullanıcı Listesi</h6>
+
+                            <!-- ── Toolbar: search + group actions ── -->
+                            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3 bg-light p-3 rounded">
+                                <div class="d-flex align-items-center gap-2">
+                                    <h6 class="fw-bold mb-0">Kullanıcı Listesi</h6>
+                                    <!-- ✅ NEW: Search/filter box -->
+                                    <div class="input-group input-group-sm" style="width:240px;">
+                                        <span class="input-group-text bg-white border-end-0">
+                                            <i class="fa-solid fa-magnifying-glass text-muted"></i>
+                                        </span>
+                                        <input type="text" id="userSearchInput" class="form-control border-start-0"
+                                               placeholder="Ad, soyad veya e-posta ara..."
+                                               oninput="filterUsers()">
+                                    </div>
+                                </div>
                                 <div class="input-group w-auto">
                                     <select id="bulkGroupSelect" class="form-select form-select-sm"></select>
                                     <button class="btn btn-sm btn-success" onclick="bulkAddUsers()">
@@ -50,6 +66,7 @@
                                     </button>
                                 </div>
                             </div>
+
                             <div class="table-responsive">
                                 <table class="table table-hover align-middle">
                                     <thead class="text-uppercase text-muted small">
@@ -69,9 +86,16 @@
                                         </tr>
                                     </tbody>
                                 </table>
+                                <!-- ✅ NEW: no-results row shown by filterUsers() -->
+                                <div id="noResultsRow" class="text-center text-muted py-3 d-none">
+                                    <i class="fa-solid fa-circle-info me-1"></i> Arama kriterine uyan kullanıcı bulunamadı.
+                                </div>
                             </div>
                         </div>
 
+                        <!-- ═══════════════════════════════════════════════════════ -->
+                        <!--  GROUPS TAB                                            -->
+                        <!-- ═══════════════════════════════════════════════════════ -->
                         <div class="tab-pane fade" id="groups" role="tabpanel">
                             <div class="row">
                                 <div class="col-md-5">
@@ -135,10 +159,38 @@
         const authHeader = () => ({ "Authorization": `Bearer ${token}` });
         const jsonHeader = () => ({ "Content-Type": "application/json", "Authorization": `Bearer ${token}` });
 
-        // ─── Select All ───────────────────────────────────────────────────────
+        // ─── Select All (only visible rows) ───────────────────────────────────
         function toggleSelectAll() {
             const checked = document.getElementById("selectAll").checked;
-            document.querySelectorAll(".user-checkbox").forEach(cb => cb.checked = checked);
+            // Only check/uncheck checkboxes in visible (non-hidden) rows
+            document.querySelectorAll("#usersTableBody tr:not([style*='display: none']) .user-checkbox")
+                .forEach(cb => cb.checked = checked);
+        }
+
+        // ─── ✅ NEW: Filter users by name or email ─────────────────────────────
+        function filterUsers() {
+            const query = document.getElementById("userSearchInput").value.toLowerCase().trim();
+            const rows = document.querySelectorAll("#usersTableBody tr");
+            let visibleCount = 0;
+
+            rows.forEach(row => {
+                // Each row has data-name and data-email attributes set when rendered
+                const name = (row.dataset.name || "").toLowerCase();
+                const email = (row.dataset.email || "").toLowerCase();
+
+                if (!query || name.includes(query) || email.includes(query)) {
+                    row.style.display = "";
+                    visibleCount++;
+                } else {
+                    row.style.display = "none";
+                }
+            });
+
+            // Show/hide the "no results" message
+            document.getElementById("noResultsRow").classList.toggle("d-none", visibleCount > 0);
+
+            // Reset select-all checkbox when filter changes
+            document.getElementById("selectAll").checked = false;
         }
 
         // ─── Bulk Add to Group ────────────────────────────────────────────────
@@ -146,12 +198,8 @@
             const groupId = document.getElementById("bulkGroupSelect").value;
             const selected = Array.from(document.querySelectorAll(".user-checkbox:checked")).map(cb => cb.value);
 
-            if (!groupId) {
-                return alert("Lütfen bir grup seçin!");
-            }
-            if (selected.length === 0) {
-                return alert("Lütfen en az bir kullanıcı seçin!");
-            }
+            if (!groupId) return alert("Lütfen bir grup seçin!");
+            if (selected.length === 0) return alert("Lütfen en az bir kullanıcı seçin!");
 
             const res = await fetch(`${API_BASE}/Group/add-users-bulk`, {
                 method: "POST",
@@ -171,28 +219,17 @@
             const groupId = document.getElementById("bulkGroupSelect").value;
             const selected = Array.from(document.querySelectorAll(".user-checkbox:checked")).map(cb => cb.value);
 
-            if (!groupId) {
-                return alert("Lütfen işlem yapılacak grubu seçin!");
-            }
-            if (selected.length === 0) {
-                return alert("Lütfen gruptan çıkarmak istediğiniz kullanıcıları seçin!");
-            }
-            if (!confirm("Seçili kullanıcıları bu gruptan çıkarmak istediğinize emin misiniz?")) {
-                return;
-            }
+            if (!groupId) return alert("Lütfen işlem yapılacak grubu seçin!");
+            if (selected.length === 0) return alert("Lütfen gruptan çıkarmak istediğiniz kullanıcıları seçin!");
+            if (!confirm("Seçili kullanıcıları bu gruptan çıkarmak istediğinize emin misiniz?")) return;
 
             let successCount = 0;
-
-            // Seçili her kullanıcı için API'ye çıkarma isteği atıyoruz
             for (let userId of selected) {
                 const res = await fetch(`${API_BASE}/Admin/remove-member/${groupId}/${userId}`, {
                     method: "DELETE",
                     headers: authHeader()
                 });
-
-                if (res.ok) {
-                    successCount++;
-                }
+                if (res.ok) successCount++;
             }
 
             alert(`${successCount} kullanıcı gruptan başarıyla çıkarıldı.`);
@@ -212,8 +249,9 @@
 
             document.getElementById("usersTableBody").innerHTML = users.map(u => {
                 const isAdmin = u.roles.includes("Admin");
+                // ✅ data-name and data-email drive the filter
                 return `
-                <tr>
+                <tr data-name="${(u.firstName + ' ' + u.lastName).toLowerCase()}" data-email="${(u.email || '').toLowerCase()}">
                     <td><input type="checkbox" class="user-checkbox" value="${u.id}"></td>
                     <td><div class="fw-bold">${u.firstName} ${u.lastName}</div></td>
                     <td class="text-muted small">${u.email}</td>
@@ -235,13 +273,14 @@
                     </td>
                 </tr>`;
             }).join('');
+
+            // Re-apply any active filter after reload
+            filterUsers();
         }
 
         // ─── Grant Admin ──────────────────────────────────────────────────────
         async function grantAdmin(id) {
-            if (!confirm("Bu kullanıcıyı Admin yapmak istediğinize emin misiniz?")) {
-                return;
-            }
+            if (!confirm("Bu kullanıcıyı Admin yapmak istediğinize emin misiniz?")) return;
 
             const res = await fetch(`${API_BASE}/Admin/assign-role/${id}/Admin`, {
                 method: "POST",
@@ -257,9 +296,7 @@
 
         // ─── Remove Admin ─────────────────────────────────────────────────────
         async function removeAdmin(id) {
-            if (!confirm("Bu kullanıcının Admin yetkisini kaldırmak istediğinize emin misiniz?")) {
-                return;
-            }
+            if (!confirm("Bu kullanıcının Admin yetkisini kaldırmak istediğinize emin misiniz?")) return;
 
             const res = await fetch(`${API_BASE}/Admin/remove-role/${id}/Admin`, {
                 method: "POST",
@@ -276,9 +313,7 @@
 
         // ─── Delete User ──────────────────────────────────────────────────────
         async function deleteUser(id) {
-            if (!confirm("Bu kullanıcıyı kalıcı olarak silmek istediğinize emin misiniz?")) {
-                return;
-            }
+            if (!confirm("Bu kullanıcıyı kalıcı olarak silmek istediğinize emin misiniz?")) return;
 
             const res = await fetch(`${API_BASE}/Admin/delete-user/${id}`, {
                 method: "DELETE",
@@ -293,14 +328,13 @@
         }
 
         // ─── Load Groups ──────────────────────────────────────────────────────
+        // ✅ FIX: use /Group/list (all groups) instead of /Group/my-groups (only member groups)
         async function loadGroups() {
-                const res = await fetch(`${API_BASE}/Group/my-groups`, {
-            headers: authHeader()
-        });
+            const res = await fetch(`${API_BASE}/Group/list`, {
+                headers: authHeader()
+            });
 
-            if (!res.ok) {
-                return;
-            }
+            if (!res.ok) return;
 
             const groups = await res.json();
 
@@ -326,9 +360,7 @@
         async function createGroup() {
             const name = document.getElementById("newGroupName").value.trim();
 
-            if (!name) {
-                return alert("Lütfen bir grup adı girin.");
-            }
+            if (!name) return alert("Lütfen bir grup adı girin.");
 
             const res = await fetch(`${API_BASE}/Group/create`, {
                 method: "POST",
@@ -346,9 +378,7 @@
 
         // ─── Delete Group ─────────────────────────────────────────────────────
         async function deleteGroup(id) {
-            if (!confirm("Bu grubu kalıcı olarak silmek istediğinize emin misiniz?")) {
-                return;
-            }
+            if (!confirm("Bu grubu kalıcı olarak silmek istediğinize emin misiniz?")) return;
 
             const res = await fetch(`${API_BASE}/Admin/delete-group/${id}`, {
                 method: "DELETE",
@@ -358,7 +388,8 @@
             if (res.ok) {
                 loadGroups();
             } else {
-                alert("Silme işlemi başarısız.");
+                const err = await res.json().catch(() => ({}));
+                alert(err.message || "Silme işlemi başarısız.");
             }
         }
 
