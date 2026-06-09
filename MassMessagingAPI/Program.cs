@@ -90,14 +90,13 @@ builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1", new OpenApiInfo { Title = "MassMessaging API", Version = "v1" });
 
-    // GÜNCELLEDİĞİMİZ KISIM BURASI: Artık sadece token'ı yapıştırman yeterli!
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         Description = "Lütfen aldığınız Token'ı direkt buraya yapıştırın. (Başına 'Bearer ' yazmanıza GEREK YOKTUR, sistem otomatik ekler)",
         Name = "Authorization",
         In = ParameterLocation.Header,
-        Type = SecuritySchemeType.Http, // ApiKey yerine Http yaptık
-        Scheme = "bearer", // Swagger otomatik Bearer ekleyecek
+        Type = SecuritySchemeType.Http, 
+        Scheme = "bearer", 
         BearerFormat = "JWT"
     });
 
