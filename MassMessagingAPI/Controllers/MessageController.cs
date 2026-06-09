@@ -156,11 +156,34 @@ namespace MassMessagingAPI.Controllers
         public async Task<IActionResult> DeleteMessage(int id)
         {
             var msg = await _messageRepository.GetByIdAsync(id);
-            if (msg == null || msg.SenderId != User.FindFirst(ClaimTypes.NameIdentifier)?.Value)
-                return Unauthorized();
+            var myId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            var isAdmin = User.IsInRole("Admin");
+
+            // Mesajı silmeye çalışan kişi mesajın sahibi değilse VE admin değilse engelle
+            if (msg == null || (msg.SenderId != myId && !isAdmin))
+                return Unauthorized(new { Message = "Bu mesajı silme yetkiniz yok." });
+
             msg.IsDeleted = true;
             await _messageRepository.UpdateAsync(msg);
             await _context.SaveChangesAsync();
+
+            // SignalR ile mesajın silindiğini anlık olarak herkese bildir
+            if (msg.GroupId != null)
+            {
+                var group = await _groupRepository.GetByIdAsync(msg.GroupId.Value);
+                if (group != null)
+                    await _hubContext.Clients.Group(group.Name).SendAsync("MessageDeleted", id);
+            }
+            else
+            {
+                // Birebir sohbetlerde iki tarafa da silinme komutunu gönder
+                await _hubContext.Clients.User(msg.SenderId).SendAsync("MessageDeleted", id);
+                if (!string.IsNullOrEmpty(msg.ReceiverId))
+                {
+                    await _hubContext.Clients.User(msg.ReceiverId).SendAsync("MessageDeleted", id);
+                }
+            }
+
             return Ok();
         }
 
@@ -197,21 +220,58 @@ namespace MassMessagingAPI.Controllers
 
             return Ok(new { UnreadCount = count });
         }
-
         [HttpPost("upload-file")]
         public async Task<IActionResult> UploadFile(IFormFile file)
         {
             if (file == null || file.Length == 0) return BadRequest("Dosya yok.");
-            var allowedExtensions = new[] { ".jpg", ".png", ".mp4", ".pdf" };
+
+            // BURAYI GÜNCELLEDİK: .webm, .ogg, .mp3, .wav eklendi
+            var allowedExtensions = new[] { ".jpg", ".png", ".mp4", ".pdf", ".webm", ".ogg", ".mp3", ".wav" };
+
             var ext = Path.GetExtension(file.FileName).ToLower();
             if (!allowedExtensions.Contains(ext)) return BadRequest("Desteklenmeyen dosya tipi.");
+
             var fileName = Guid.NewGuid().ToString() + ext;
             var uploadsPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads");
-            Directory.CreateDirectory(uploadsPath); // ensure folder exists
+            Directory.CreateDirectory(uploadsPath);
+
             var path = Path.Combine(uploadsPath, fileName);
             using (var stream = new FileStream(path, FileMode.Create))
                 await file.CopyToAsync(stream);
+
             return Ok(new { url = "/uploads/" + fileName });
+        }
+        [HttpPut("mark-conversation-read/{id}")]
+        public async Task<IActionResult> MarkConversationRead(string id, [FromQuery] bool isGroup)
+        {
+            var myId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+            IQueryable<Message> unreadMessages;
+
+            if (isGroup)
+            {
+                if (!int.TryParse(id, out int groupId)) return BadRequest();
+                // Gruptaki benim dışımdaki kişilerin yazdığı okunmamış mesajlar
+                unreadMessages = _context.Messages.Where(m => !m.IsDeleted && !m.IsRead && m.GroupId == groupId && m.SenderId != myId);
+            }
+            else
+            {
+                // Birebir sohbetteki okunmamış mesajlar
+                unreadMessages = _context.Messages.Where(m => !m.IsDeleted && !m.IsRead && m.SenderId == id && m.ReceiverId == myId);
+            }
+
+            var messagesToUpdate = await unreadMessages.ToListAsync();
+
+            if (messagesToUpdate.Any())
+            {
+                foreach (var msg in messagesToUpdate)
+                {
+                    msg.IsRead = true; // Veritabanında kalıcı olarak okundu yapıyoruz
+                }
+                await _context.SaveChangesAsync();
+            }
+
+            return Ok();
         }
     }
 }

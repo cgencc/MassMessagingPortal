@@ -2,10 +2,11 @@
     ViewData["Title"] = "Profilim";
 }
 
-<div class="container mt-5">
+<div class="container mt-5 mb-5">
     <div class="row justify-content-center">
-        <div class="col-md-6">
-            <div class="card shadow-sm border-0">
+        <div class="col-md-8">
+
+            <div class="card modern-card shadow-sm border-0 mb-4">
                 <div class="card-body p-4 text-center">
                     <div class="mb-3">
                         <i class="fa-solid fa-circle-user fa-5x text-primary"></i>
@@ -14,7 +15,6 @@
                     <h4 class="fw-bold" id="userName">Yükleniyor...</h4>
                     <p class="text-muted" id="userEmail"></p>
 
-                    <!-- Success / error feedback -->
                     <div id="profileMsg" class="alert" style="display:none; font-size:0.9em;"></div>
 
                     <hr class="my-4">
@@ -36,23 +36,48 @@
                         </div>
                     </div>
 
-                    <div class="d-grid gap-2 mt-4">
-                        <!-- Toggle between view/edit modes -->
-                        <button id="editBtn" onclick="enterEditMode()" class="btn btn-outline-primary">
-                            <i class="fa-solid fa-pen me-1"></i>Profili Düzenle
+                    <div class="d-grid gap-2 mt-4 d-md-block">
+                        <button id="editBtn" onclick="enterEditMode()" class="btn btn-outline-primary px-4 rounded-pill">
+                            <i class="fa-solid fa-pen me-1"></i> Profili Düzenle
                         </button>
-                        <button id="saveBtn" onclick="saveProfile()" class="btn btn-success" style="display:none;">
-                            <i class="fa-solid fa-floppy-disk me-1"></i>Kaydet
+                        <button id="saveBtn" onclick="saveProfile()" class="btn btn-success px-4 rounded-pill" style="display:none;">
+                            <i class="fa-solid fa-floppy-disk me-1"></i> Kaydet
                         </button>
-                        <button id="cancelBtn" onclick="cancelEdit()" class="btn btn-outline-secondary" style="display:none;">
+                        <button id="cancelBtn" onclick="cancelEdit()" class="btn btn-outline-secondary px-4 rounded-pill" style="display:none;">
                             İptal
                         </button>
-                        <a href="/Chat/Index" class="btn btn-primary">
-                            <i class="fa-solid fa-comments me-1"></i>Sohbetlere Dön
+                        <a href="/Chat/Index" class="btn btn-primary px-4 rounded-pill">
+                            <i class="fa-solid fa-comments me-1"></i> Sohbetlere Dön
                         </a>
                     </div>
                 </div>
             </div>
+
+            <div class="card modern-card shadow-sm border-0 p-4">
+                <h5 class="fw-bold mb-3"><i class="fa-solid fa-lock text-warning me-2"></i>Şifre Değiştir</h5>
+                <div id="profileAlert" class="alert d-none" style="font-size:0.9em;" role="alert"></div>
+
+                <div class="row">
+                    <div class="col-md-4 mb-3">
+                        <label class="form-label small fw-bold text-muted text-uppercase">Mevcut Şifre</label>
+                        <input type="password" id="oldPasswordInput" class="form-control" placeholder="••••••••">
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <label class="form-label small fw-bold text-muted text-uppercase">Yeni Şifre</label>
+                        <input type="password" id="newPasswordInput" class="form-control" placeholder="••••••••">
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <label class="form-label small fw-bold text-muted text-uppercase">Yeni Şifre (Tekrar)</label>
+                        <input type="password" id="confirmNewPasswordInput" class="form-control" placeholder="••••••••">
+                    </div>
+                </div>
+                <div class="text-end mt-2">
+                    <button onclick="changeProfilePassword()" id="changePassBtn" class="btn btn-warning fw-bold px-4 rounded-pill shadow-sm">
+                        Şifreyi Değiştir <i class="fa-solid fa-key ms-1"></i>
+                    </button>
+                </div>
+            </div>
+
         </div>
     </div>
 </div>
@@ -70,6 +95,7 @@
             await loadProfile();
         });
 
+        // --- PROFİL BİLGİLERİ İŞLEMLERİ ---
         async function loadProfile() {
             try {
                 const res = await fetch(`${API_BASE}/User/profile`, {
@@ -148,6 +174,64 @@
             el.innerText = text;
             el.style.display = "block";
             setTimeout(() => el.style.display = "none", 4000);
+        }
+
+        // --- ŞİFRE DEĞİŞTİRME İŞLEMLERİ ---
+        async function changeProfilePassword() {
+            const oldPass = document.getElementById("oldPasswordInput").value;
+            const newPass = document.getElementById("newPasswordInput").value;
+            const confirmPass = document.getElementById("confirmNewPasswordInput").value;
+            const btn = document.getElementById("changePassBtn");
+
+            if (!oldPass || !newPass || !confirmPass) {
+                showProfileAlert("Lütfen tüm alanları doldurun.", "danger");
+                return;
+            }
+
+            if (newPass !== confirmPass) {
+                showProfileAlert("Yeni şifreler birbiriyle uyuşmuyor.", "danger");
+                return;
+            }
+
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span> Değiştiriliyor...';
+
+            try {
+                const res = await fetch(`${API_BASE}/Auth/change-password`, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": `Bearer ${token}`
+                    },
+                    body: JSON.stringify({
+                        oldPassword: oldPass,
+                        newPassword: newPass
+                    })
+                });
+                const data = await res.json();
+
+                if (res.ok) {
+                    showProfileAlert("Şifreniz başarıyla değiştirildi!", "success");
+                    document.getElementById("oldPasswordInput").value = "";
+                    document.getElementById("newPasswordInput").value = "";
+                    document.getElementById("confirmNewPasswordInput").value = "";
+                } else {
+                    showProfileAlert(data.message || "Hata! Mevcut şifreniz yanlış olabilir.", "danger");
+                }
+            } catch (e) {
+                showProfileAlert("Sunucu hatası.", "danger");
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = 'Şifreyi Değiştir <i class="fa-solid fa-key ms-1"></i>';
+            }
+        }
+
+        function showProfileAlert(msg, type) {
+            const pAlert = document.getElementById("profileAlert");
+            pAlert.className = `alert alert-${type}`;
+            pAlert.innerText = msg;
+            pAlert.classList.remove("d-none");
+            setTimeout(() => pAlert.classList.add("d-none"), 5000); // 5 saniye sonra uyarıyı gizle
         }
     </script>
 }

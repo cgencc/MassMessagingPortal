@@ -108,3 +108,187 @@ body {
     display: flex;
     flex-direction: column;
 }
+/* --- YENÝ PROFESYONEL KARANLIK TEMA (WhatsApp Dark) --- */
+body.dark-theme {
+    background-color: #111b21 !important;
+    color: #e9edef !important;
+}
+
+    /* Bootstrap'in beyaz/açýk renk sýnýflarýný karanlýk modda eziyoruz */
+    body.dark-theme .bg-white,
+    body.dark-theme .bg-light {
+        background-color: #111b21 !important;
+        color: #e9edef !important;
+    }
+
+    /* Üst Menü (Navbar) */
+    body.dark-theme .navbar {
+        background-color: #202c33 !important;
+        border-bottom: 1px solid #222e35 !important;
+    }
+
+    body.dark-theme .navbar-brand,
+    body.dark-theme .nav-link,
+    body.dark-theme .text-dark {
+        color: #e9edef !important;
+    }
+
+    /* Tüm Çizgiler ve Kenarlýklar (Borders) */
+    body.dark-theme .border-end,
+    body.dark-theme .border-bottom,
+    body.dark-theme .border-top,
+    body.dark-theme .border,
+    body.dark-theme #searchPanel {
+        border-color: #222e35 !important;
+    }
+
+    /* Sohbet Listesi ve Baþlýklar (Sol Menü ve Sað Üst) */
+    body.dark-theme #chatList .bg-light,
+    body.dark-theme #chatHeader.bg-light,
+    body.dark-theme .p-2.border-top.bg-light,
+    body.dark-theme .p-3.border-bottom.bg-light {
+        background-color: #202c33 !important;
+    }
+
+    body.dark-theme .chat-list-item {
+        border-bottom: 1px solid #222e35 !important;
+        color: #e9edef !important;
+    }
+
+        body.dark-theme .chat-list-item:hover {
+            background-color: #2a3942 !important;
+        }
+
+        body.dark-theme .chat-list-item.active-chat {
+            background-color: #2a3942 !important;
+            border-left-color: #00a884 !important;
+        }
+
+    /* --- SOHBET ÝÇÝ ALANI --- */
+    body.dark-theme #chatBox,
+    body.dark-theme .chat-container {
+        background-color: #0b141a !important;
+    }
+
+    body.dark-theme .msg-other {
+        background-color: #202c33 !important;
+        border-color: #202c33 !important;
+        color: #e9edef !important;
+    }
+
+    body.dark-theme .msg-me {
+        background-color: #005c4b !important;
+        color: #e9edef !important;
+    }
+
+    body.dark-theme .msg-time,
+    body.dark-theme .msg-sender,
+    body.dark-theme .text-muted,
+    body.dark-theme #chatEmptyState {
+        color: #8696a0 !important;
+    }
+
+    body.dark-theme .msg-actions button {
+        color: #8696a0 !important;
+    }
+
+    /* --- ÝNPUTLAR (Arama ve Mesaj Yazma Kutularý) --- */
+    body.dark-theme .form-control {
+        background-color: #2a3942 !important;
+        border-color: #2a3942 !important;
+        color: #d1d7db !important;
+    }
+
+        body.dark-theme .form-control::placeholder {
+            color: #8696a0 !important;
+        }
+
+        body.dark-theme .form-control:focus {
+            background-color: #2a3942 !important;
+            color: #d1d7db !important;
+            border-color: #00a884 !important;
+            box-shadow: none !important;
+        }
+
+    body.dark-theme .input-group-text {
+        background-color: #2a3942 !important;
+        border-color: #2a3942 !important;
+        color: #8696a0 !important;
+    }
+
+    /* Arama Sonuçlarý Sekmesi */
+    body.dark-theme #searchResults {
+        background-color: #111b21 !important;
+    }
+
+    body.dark-theme .search-result-item {
+        border-bottom: 1px solid #222e35 !important;
+    }
+
+        body.dark-theme .search-result-item:hover {
+            background-color: #202c33 !important;
+        }
+
+    /* --- KARTLAR VE FORM EKRANLARI (Giriþ, Kayýt, Þifremi Unuttum, Profil) --- */
+    body.dark-theme .card,
+    body.dark-theme .modern-card {
+        background-color: #202c33 !important;
+        color: #e9edef !important;
+        border: 1px solid #222e35 !important;
+        box-shadow: 0 10px 25px rgba(0,0,0,0.4) !important;
+    }
+
+        /* Kart Ýçindeki Baþlýklar ve Yazýlar */
+        body.dark-theme .card h3,
+        body.dark-theme .card h4,
+        body.dark-theme .card h5,
+        body.dark-theme .card .fw-bold,
+        body.dark-theme #userName {
+            color: #e9edef !important;
+        }
+
+        body.dark-theme .card .text-muted,
+        body.dark-theme .form-label,
+        body.dark-theme hr {
+            color: #8696a0 !important;
+            border-color: #222e35 !important;
+        }
+
+        /* Ýkon Renklerinin Karanlýk Modda Daha Yumuþak Olmasý Ýçin */
+        body.dark-theme .card .text-primary {
+            color: #53bdeb !important;
+        }
+
+        body.dark-theme .card .text-success {
+            color: #00a884 !important;
+        }
+
+        /* Auth Ekranlarýndaki Yönlendirme Linkleri (Þifremi Unuttum, Kayýt Ol vb.) */
+        body.dark-theme .card a.text-primary,
+        body.dark-theme .card a {
+            color: #00a884 !important;
+            transition: 0.3s;
+        }
+
+            body.dark-theme .card a:hover {
+                color: #128c7e !important;
+                text-decoration: underline !important;
+            }
+
+    /* Ýnput Grubu Ýkonlarýnýn (Zemin) Arka Planý */
+    body.dark-theme .input-group-text {
+        background-color: #2a3942 !important;
+        border-color: #222e35 !important;
+        color: #8696a0 !important;
+    }
+
+    body.dark-theme .form-control {
+        background-color: #2a3942 !important;
+        border-color: #222e35 !important;
+        color: #d1d7db !important;
+    }
+
+        body.dark-theme .form-control:focus {
+            border-color: #00a884 !important;
+            box-shadow: 0 0 0 0.25rem rgba(0, 168, 132, 0.25) !important;
+        }

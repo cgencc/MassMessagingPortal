@@ -219,6 +219,11 @@
             <button class="btn btn-outline-secondary btn-sm" onclick="document.getElementById('mediaInput').click()" title="Dosya ekle">
                 <i class="fa-solid fa-paperclip"></i>
             </button>
+
+            <button id="recordBtn" class="btn btn-outline-danger btn-sm" onclick="toggleRecording()" title="Ses Kaydı (Tıkla başla, tıkla bitir)">
+                <i class="fa-solid fa-microphone"></i>
+            </button>
+
             <input type="text" id="messageInput" class="form-control rounded-pill" placeholder="Bir şeyler yazın..." onkeydown="if(event.key==='Enter') sendMessage()">
             <button onclick="sendMessage()" class="btn btn-primary rounded-pill px-4">
                 Gönder <i class="fa-solid fa-paper-plane ms-1"></i>
@@ -231,11 +236,18 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.0/signalr.min.js"></script>
     <script>
         const API_BASE = "https://localhost:7124/api";
-        const HUB_URL  = "https://localhost:7124/chatHub";
-        const token    = localStorage.getItem("JWToken");
+          const HUB_URL  = "https://localhost:7124/chatHub";
+          const token    = localStorage.getItem("JWToken");
 
-        if (!token) window.location.href = "/Auth/Login";
+          if (!token) window.location.href = "/Auth/Login";
 
+          // --- YENİ EKLENEN: ADMİN KONTROLÜ ---
+          let isAdmin = false;
+          try {
+              const payload = JSON.parse(atob(token.split('.')[1]));
+              const role = payload["http://schemas.microsoft.com/ws/2008/06/identity/claims/role"] || payload["role"];
+              isAdmin = role === "Admin" || (Array.isArray(role) && role.includes("Admin"));
+          } catch (e) { }
         // ── Global state ──────────────────────────────────────────────────────
         let activeId = null, isGroup = false, activeName = "";
         let connection = null, typingTimer;
@@ -254,18 +266,26 @@
                 .withUrl(HUB_URL, { accessTokenFactory: () => token })
                 .withAutomaticReconnect()
                 .build();
-
-            // Incoming DM
-            connection.on("ReceiveMessage", (sId, sName, content) => {
-                if (document.hidden) new Notification("Yeni Mesaj!", { body: `${sName}: ${content}` });
-                if (!isGroup && activeId === sId) {
-                    renderMessage(sName, content, false, null, null, true);
-                    markConversationRead(sId);
-                } else {
-                    incrementUnread(sId);
-                    showToast(`📩 ${sName}: ${content}`);
+                // ✅ Mesaj Silinme Dinleyicisi (Biri mesaj sildiğinde herkesten anında kaybolur)
+            connection.on("MessageDeleted", (deletedMsgId) => {
+                const msgContent = document.getElementById(`msg-content-${deletedMsgId}`);
+                if (msgContent) {
+                    msgContent.closest(".msg-bubble").remove();
                 }
             });
+
+            // Incoming DM
+        // Incoming DM
+        connection.on("ReceiveMessage", (sId, sName, content) => {
+            if (document.hidden) new Notification("Yeni Mesaj!", { body: `${sName}: ${content}` });
+            if (!isGroup && activeId === sId) {
+                renderMessage(sName, content, false, null, null, true);
+                markConversationRead(sId, false); // <--- BURAYA , false EKLENDİ
+            } else {
+                incrementUnread(sId);
+                showToast(`📩 ${sName}: ${content}`);
+            }
+        });
 
             // Incoming group message
             connection.on("ReceiveGroupMessage", (gName, sName, content) => {
@@ -404,10 +424,20 @@
             badge.classList.add("visible");
         }
 
-        function markConversationRead(id) {
-            const el = document.getElementById(`badge-${id}`);
-            if (el) { el.textContent = "0"; el.classList.remove("visible"); }
-        }
+        function markConversationRead(id, isGroup) {
+                    // 1. Ekrandaki (UI) rozeti sıfırla
+                    const badgeId = isGroup ? `badge-g-${id}` : `badge-${id}`;
+                    const el = document.getElementById(badgeId);
+                    if (el) { el.textContent = "0"; el.classList.remove("visible"); }
+
+                    // 2. Veritabanında (API) kalıcı olarak okundu işaretle
+                    try {
+                        fetch(`${API_BASE}/Message/mark-conversation-read/${id}?isGroup=${isGroup}`, {
+                            method: "PUT",
+                            headers: { "Authorization": `Bearer ${token}` }
+                        });
+                    } catch (e) { console.error("Okundu işaretlenemedi", e); }
+                }
 
         // ── Presence dots ─────────────────────────────────────────────────────
         function updatePresenceDot(userId, isOnline) {
@@ -417,16 +447,18 @@
 
         // ── Start chat ────────────────────────────────────────────────────────
         function startChat(id, group, element, name) {
-            activeId = id; isGroup = group; activeName = name;
-            currentPage = 1; hasMore = true;
-            document.querySelectorAll('.chat-list-item').forEach(el => el.classList.remove('active-chat'));
-            if (element) element.classList.add('active-chat');
-            document.getElementById("chatHeaderName").innerText = name;
-            // Clear badge for opened conversation
-            if (!group) markConversationRead(id);
-            else { const b = document.getElementById(`badge-g-${id}`); if(b){b.textContent="0";b.classList.remove("visible");} }
-            loadHistory(id);
-        }
+             activeId = id;
+             isGroup = group; activeName = name;
+             currentPage = 1; hasMore = true;
+             document.querySelectorAll('.chat-list-item').forEach(el => el.classList.remove('active-chat'));
+             if (element) element.classList.add('active-chat');
+             document.getElementById("chatHeaderName").innerText = name;
+
+             // Tıkladığımız an veritabanını da güncelliyoruz
+             markConversationRead(id, group);
+
+             loadHistory(id);
+         }
 
         // ── Message history ───────────────────────────────────────────────────
         async function loadHistory(id, isLoadMore = false) {
@@ -467,32 +499,32 @@
             isLoading = false;
         }
 
-        // ── Render a message bubble ───────────────────────────────────────────
         function renderMessage(name, content, isMine, sentDate = null, messageId = null, toBottom = true) {
-            const chatBox = document.getElementById("chatBox");
-            document.getElementById("chatEmptyState")?.remove();
+                    const chatBox = document.getElementById("chatBox");
+                    document.getElementById("chatEmptyState")?.remove();
 
-            const timeStr  = sentDate ? new Date(sentDate).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" }) : "";
-            const isMe     = (isMine === true || isMine === "true");
-            const bubbleClass = isMe ? "msg-me" : "msg-other";
+                    const timeStr  = sentDate ? new Date(sentDate).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" }) : "";
+                    const isMe     = (isMine === true || isMine === "true");
+                    const bubbleClass = isMe ? "msg-me" : "msg-other";
 
-            const actions = isMe ? `
-                <div class="d-flex gap-2 justify-content-end msg-actions">
-                    <button onclick="editMsg(${messageId}, '${escapeHtml(content)}')" class="text-dark"><i class="fa-solid fa-pen-to-square"></i></button>
-                    <button onclick="deleteMsg(${messageId})" class="text-danger"><i class="fa-solid fa-trash"></i></button>
-                </div>` : "";
+                    // YENİ EKLENEN: Sadece kendisi ise düzenlesin, ama Adminse veya Kendisiyse silebilsin
+                    const actions = (isMe || isAdmin) ? `
+                        <div class="d-flex gap-2 justify-content-end msg-actions">
+                            ${isMe ? `<button onclick="editMsg(${messageId}, '${escapeHtml(content)}')" class="text-dark"><i class="fa-solid fa-pen-to-square"></i></button>` : ''}
+                            <button onclick="deleteMsg(${messageId})" class="text-danger" title="Mesajı Sil"><i class="fa-solid fa-trash"></i></button>
+                        </div>` : "";
 
-            const html = `
-                <div class="msg-bubble ${bubbleClass}">
-                    ${!isMe ? `<span class="msg-sender">${escapeHtml(name)}</span>` : ""}
-                    <div id="msg-content-${messageId}">${content}</div>
-                    ${actions}
-                    <span class="msg-time">${timeStr}</span>
-                </div>`;
+                    const html = `
+                        <div class="msg-bubble ${bubbleClass}">
+                            ${!isMe ? `<span class="msg-sender">${escapeHtml(name)}</span>` : ""}
+                            <div id="msg-content-${messageId}">${content}</div>
+                            ${actions}
+                            <span class="msg-time">${timeStr}</span>
+                        </div>`;
 
-            if (toBottom) { chatBox.innerHTML += html; chatBox.scrollTop = chatBox.scrollHeight; }
-            else { chatBox.insertAdjacentHTML("afterbegin", html); }
-        }
+                    if (toBottom) { chatBox.innerHTML += html; chatBox.scrollTop = chatBox.scrollHeight; }
+                    else { chatBox.insertAdjacentHTML("afterbegin", html); }
+                }
 
         // ── Send / Edit / Delete ──────────────────────────────────────────────
         async function sendMessage(contentOverride = null) {
@@ -533,6 +565,87 @@
             const res  = await fetch(`${API_BASE}/Message/upload-file`, { method: "POST", headers: { "Authorization": `Bearer ${token}` }, body: formData });
             const data = await res.json();
             sendMessage(`<img src="https://localhost:7124${data.url}" style="max-width:200px; border-radius:8px;">`);
+        }
+        // ── Voice Record (Sesli Mesaj) ────────────────────────────────────────
+        let mediaRecorder;
+        let audioChunks = [];
+        let isRecording = false;
+
+        async function toggleRecording() {
+            if (!activeId) {
+                showToast("Lütfen ses göndermek için önce bir sohbet seçin.");
+                return;
+            }
+
+            if (!isRecording) {
+                // KAYDA BAŞLA
+                try {
+                    // Mikrofon izni iste
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    mediaRecorder = new MediaRecorder(stream);
+                    audioChunks = [];
+
+                    mediaRecorder.ondataavailable = e => {
+                        if (e.data.size > 0) audioChunks.push(e.data);
+                    };
+
+                    mediaRecorder.onstop = async () => {
+                        // Kayıt bitince Blob'a (dosyaya) çevir ve API'ye yolla
+                        const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                        await uploadAudioBlob(audioBlob);
+
+                        // Mikrofonu geri kapat
+                        stream.getTracks().forEach(track => track.stop());
+                    };
+
+                    mediaRecorder.start();
+                    isRecording = true;
+
+                    // Buton tasarımını değiştir (kaydediyor efekti)
+                    const btn = document.getElementById("recordBtn");
+                    btn.classList.replace("btn-outline-danger", "btn-danger");
+                    btn.innerHTML = '<i class="fa-solid fa-stop"></i> Kaydediliyor...';
+                } catch (err) {
+                    console.error("Mikrofon hatası:", err);
+                    showToast("Mikrofona erişilemedi! Tarayıcıdan izin verdiğinize emin olun.");
+                }
+            } else {
+                // KAYDI BİTİR VE GÖNDER
+                mediaRecorder.stop();
+                isRecording = false;
+
+                // Butonu eski haline getir
+                const btn = document.getElementById("recordBtn");
+                btn.classList.replace("btn-danger", "btn-outline-danger");
+                btn.innerHTML = '<i class="fa-solid fa-microphone"></i>';
+                showToast("Ses gönderiliyor, lütfen bekleyin...");
+            }
+        }
+
+        async function uploadAudioBlob(blob) {
+            const formData = new FormData();
+            // Backend'in kabul etmesi için isim ve uzantı veriyoruz
+            formData.append("file", blob, "voice_message.webm");
+
+            try {
+                const res = await fetch(`${API_BASE}/Message/upload-file`, {
+                    method: "POST",
+                    headers: { "Authorization": `Bearer ${token}` },
+                    body: formData
+                });
+                const data = await res.json();
+
+                if(res.ok) {
+                    // Yüklenen ses dosyasının URL'ini HTML audio etiketi olarak sohbet penceresine yolla
+                    const audioHtml = `<audio controls src="https://localhost:7124${data.url}" style="height: 40px; max-width: 220px; outline: none; border-radius: 8px;"></audio>`;
+                    sendMessage(audioHtml);
+                } else {
+                    showToast("Ses yüklenirken bir sorun oluştu.");
+                }
+            } catch (e) {
+                console.error("Ses upload hatası:", e);
+                showToast("Sunucuya bağlanılamadı.");
+            }
         }
 
         // ── Search ────────────────────────────────────────────────────────────

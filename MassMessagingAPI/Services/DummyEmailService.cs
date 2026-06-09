@@ -1,0 +1,19 @@
+﻿namespace MassMessagingAPI.Services
+{
+    public class DummyEmailService : IEmailService
+    {
+        public Task SendEmailAsync(string toEmail, string subject, string body)
+        {
+            // Gerçek mail atmak yerine linki konsola yazdırıyoruz.
+            // İleride buraya MailKit kodlarını yapıştıracaksın.
+            Console.WriteLine("\n=========================================");
+            Console.WriteLine($"DUMMY MAIL GÖNDERİLDİ!");
+            Console.WriteLine($"Kime: {toEmail}");
+            Console.WriteLine($"Konu: {subject}");
+            Console.WriteLine($"İçerik/Link: \n{body}");
+            Console.WriteLine("=========================================\n");
+
+            return Task.CompletedTask;
+        }
+    }
+}

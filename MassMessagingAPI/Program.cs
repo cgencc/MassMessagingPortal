@@ -92,6 +92,7 @@ builder.Services.AddCors(options =>
 
 // ─── Swagger ──────────────────────────────────────────────────────────────────
 builder.Services.AddControllers();
+builder.Services.AddScoped<IEmailService, DummyEmailService>();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {

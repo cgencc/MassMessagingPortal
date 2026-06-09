@@ -1,8 +1,72 @@
 ﻿@{
-    ViewData["Title"] = "Home Page";
+    ViewData["Title"] = "Ana Sayfa";
 }
 
-<div class="text-center">
-    <h1 class="display-4">Welcome</h1>
-    <p>Learn about <a href="https://learn.microsoft.com/aspnet/core">building Web apps with ASP.NET Core</a>.</p>
+<div class="container py-4">
+    <div class="row align-items-center mb-5 pb-5 border-bottom">
+        <div class="col-lg-6 text-center text-lg-start mt-4 mt-lg-0 order-2 order-lg-1">
+            <h1 class="display-4 fw-bold text-primary mb-3">
+                İletişimin En <span class="text-info">Hızlı</span> Hali
+            </h1>
+            <p class="lead mb-4 text-muted">
+                MassPortal ile arkadaşlarınızla, iş arkadaşlarınızla veya topluluklarla gerçek zamanlı olarak kesintisiz iletişim kurun.
+                Sesli mesajlar, medya paylaşımı ve modern tasarımıyla sohbet deneyiminizi zirveye taşıyın.
+            </p>
+
+            <div id="homeActionButtons" class="d-grid gap-2 d-md-flex justify-content-md-center justify-content-lg-start">
+                <a href="/Auth/Register" class="btn btn-primary btn-lg px-4 me-md-2 rounded-pill shadow-sm">
+                    <i class="fa-solid fa-user-plus me-2"></i>Hemen Katıl
+                </a>
+                <a href="/Auth/Login" class="btn btn-outline-secondary btn-lg px-4 rounded-pill">
+                    <i class="fa-solid fa-right-to-bracket me-2"></i>Giriş Yap
+                </a>
+            </div>
+        </div>
+        <div class="col-lg-6 order-1 order-lg-2 text-center position-relative mb-5 mb-lg-0">
+            <i class="fa-solid fa-comments text-primary" style="font-size: 14rem; opacity: 0.9; filter: drop-shadow(0px 10px 15px rgba(13, 110, 253, 0.3));"></i>
+            <i class="fa-solid fa-paper-plane text-warning" style="font-size: 6rem; position: absolute; bottom: -20px; right: 20%; filter: drop-shadow(0px 5px 10px rgba(0,0,0,0.2)); transform: rotate(-15deg);"></i>
+        </div>
+    </div>
+
+    <div class="row g-4 py-5 row-cols-1 row-cols-md-3 text-center">
+        <div class="col">
+            <div class="bg-primary bg-gradient text-white rounded-circle d-inline-flex align-items-center justify-content-center mb-3 shadow" style="width: 80px; height: 80px; font-size: 2.2rem;">
+                <i class="fa-solid fa-bolt"></i>
+            </div>
+            <h3 class="fs-4 fw-semibold">Anında İletişim</h3>
+            <p class="text-muted">SignalR altyapısı sayesinde mesajlarınız saliseler içinde karşı tarafa iletilir. Sayfa yenilemeye son.</p>
+        </div>
+        <div class="col">
+            <div class="bg-success bg-gradient text-white rounded-circle d-inline-flex align-items-center justify-content-center mb-3 shadow" style="width: 80px; height: 80px; font-size: 2.2rem;">
+                <i class="fa-solid fa-users"></i>
+            </div>
+            <h3 class="fs-4 fw-semibold">Grup Sohbetleri</h3>
+            <p class="text-muted">Topluluklarınızı tek bir çatı altında toplayın. Özel gruplar oluşturun ve herkesle aynı anda konuşun.</p>
+        </div>
+        <div class="col">
+            <div class="bg-danger bg-gradient text-white rounded-circle d-inline-flex align-items-center justify-content-center mb-3 shadow" style="width: 80px; height: 80px; font-size: 2.2rem;">
+                <i class="fa-solid fa-microphone-lines"></i>
+            </div>
+            <h3 class="fs-4 fw-semibold">Ses ve Medya</h3>
+            <p class="text-muted">Sadece metin değil; sesli mesajlar, fotoğraflar ve dosyalarla iletişiminizi çok daha zengin bir hale getirin.</p>
+        </div>
+    </div>
 </div>
+
+@section Scripts {
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            const token = localStorage.getItem("JWToken");
+            const actionButtons = document.getElementById("homeActionButtons");
+
+            // Eğer tarayıcıda giriş token'ı varsa butonları değiştiriyoruz
+            if (token && actionButtons) {
+                actionButtons.innerHTML = `
+                    <a href="/Chat/Index" class="btn btn-primary btn-lg px-5 rounded-pill shadow-sm">
+                        <i class="fa-solid fa-comments me-2"></i>Sohbetlere Geç <i class="fa-solid fa-arrow-right ms-1"></i>
+                    </a>
+                `;
+            }
+        });
+    </script>
+}

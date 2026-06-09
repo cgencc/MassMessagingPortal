@@ -13,10 +13,12 @@
         <nav class="navbar navbar-expand-sm navbar-light bg-white border-bottom shadow-sm mb-4">
             <div class="container">
                 <a class="navbar-brand fw-bold text-primary" href="/Home/Index"><i class="fa-solid fa-paper-plane me-2"></i>MassPortal</a>
+
                 <div class="navbar-collapse collapse">
                     <ul class="navbar-nav flex-grow-1">
                         <li class="nav-item"><a class="nav-link fw-bold text-dark" href="/Home/Index">Ana Sayfa</a></li>
                     </ul>
+
                     <ul class="navbar-nav align-items-center" id="dynamicNav"></ul>
                 </div>
             </div>
@@ -37,24 +39,74 @@
             const token = localStorage.getItem("JWToken");
             const dynamicNav = document.getElementById("dynamicNav");
 
+            // Tema Kontrolü
+            const currentTheme = localStorage.getItem("theme");
+            if (currentTheme === "dark") {
+                document.body.classList.add("dark-theme");
+            }
+
             if (token) {
                 let isAdmin = false;
                 try {
                     const payload = JSON.parse(atob(token.split('.')[1]));
                     const role = payload["http://schemas.microsoft.com/ws/2008/06/identity/claims/role"] || payload["role"];
                     isAdmin = role === "Admin" || (Array.isArray(role) && role.includes("Admin"));
-                } catch (e) { localStorage.removeItem("JWToken"); }
+                } catch (e) {
+                    localStorage.removeItem("JWToken");
+                }
 
-                let html = `<li class="nav-item me-2"><a class="nav-link fw-semibold text-dark" href="/Chat/Index">Sohbetler</a></li>`;
+                // Menü Oluşturma (Tema Değiştirme Butonu Eklendi)
+                let html = `<li class="nav-item me-2 d-flex align-items-center">
+                                <button id="themeToggle" class="btn btn-link nav-link text-dark" onclick="toggleTheme()" title="Temayı Değiştir">
+                                    <i class="fa-solid fa-moon"></i>
+                                </button>
+                            </li>`;
+                html += `<li class="nav-item me-2"><a class="nav-link fw-semibold text-dark" href="/Chat/Index">Sohbetler</a></li>`;
+                html += `<li class="nav-item me-2"><a class="nav-link fw-semibold text-dark" href="/Profile/Index"><i class="fa-solid fa-user me-1"></i>Profil</a></li>`;
+
                 if (isAdmin) html += `<li class="nav-item me-2"><a class="nav-link fw-semibold text-danger" href="/Admin/Index">Yönetim</a></li>`;
-                html += `<li class="nav-item"><button onclick="logoutApp()" class="btn btn-outline-danger btn-sm rounded-pill px-3">Çıkış</button></li>`;
+                html += `<li class="nav-item"><button onclick="logoutApp()" class="btn btn-outline-danger btn-sm rounded-pill px-3 mt-1">Çıkış</button></li>`;
                 dynamicNav.innerHTML = html;
+
+                // Tema ikonunu mevcut temaya göre güncelle
+                updateThemeIcon();
+
             } else {
+                // Giriş yapmamış kullanıcılar için de tema butonu eklenebilir
                 dynamicNav.innerHTML = `
-                    <li class="nav-item me-2"><a class="btn btn-outline-primary btn-sm rounded-pill px-3" href="/Auth/Login">Giriş</a></li>
-                    <li class="nav-item"><a class="btn btn-primary btn-sm rounded-pill px-3" href="/Auth/Register">Kayıt</a></li>`;
+                    <li class="nav-item me-2 d-flex align-items-center">
+                        <button id="themeToggle" class="btn btn-link nav-link text-dark" onclick="toggleTheme()">
+                            <i class="fa-solid fa-moon"></i>
+                        </button>
+                    </li>
+                    <li class="nav-item me-2 mt-1"><a class="btn btn-outline-primary btn-sm rounded-pill px-3" href="/Auth/Login">Giriş</a></li>
+                    <li class="nav-item mt-1"><a class="btn btn-primary btn-sm rounded-pill px-3" href="/Auth/Register">Kayıt</a></li>`;
+                updateThemeIcon();
             }
         });
+
+        function toggleTheme() {
+            const body = document.body;
+            body.classList.toggle("dark-theme");
+
+            let theme = "light";
+            if (body.classList.contains("dark-theme")) {
+                theme = "dark";
+            }
+            localStorage.setItem("theme", theme);
+            updateThemeIcon();
+        }
+
+        function updateThemeIcon() {
+            const icon = document.querySelector("#themeToggle i");
+            if (icon) {
+                if (document.body.classList.contains("dark-theme")) {
+                    icon.className = "fa-solid fa-sun text-warning"; // Koyu temadaysa güneş ikonu çıksın
+                } else {
+                    icon.className = "fa-solid fa-moon"; // Açık temadaysa ay ikonu çıksın
+                }
+            }
+        }
 
         function logoutApp() {
             localStorage.removeItem("JWToken");

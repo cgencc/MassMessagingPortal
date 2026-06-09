@@ -8,5 +8,16 @@ namespace MassMessaging.MVC.Controllers
     {
         public IActionResult Login() => View();
         public IActionResult Register() => View();
+        [HttpGet]
+        public IActionResult ForgotPassword()
+        {
+            return View();
+        }
+
+        [HttpGet]
+        public IActionResult ResetPassword()
+        {
+            return View();
+        }
     }
 }
