@@ -36,17 +36,11 @@
 
                 <div class="card-body p-4">
                     <div class="tab-content">
-
-                        <!-- ═══════════════════════════════════════════════════════ -->
-                        <!--  USERS TAB                                             -->
-                        <!-- ═══════════════════════════════════════════════════════ -->
                         <div class="tab-pane fade show active" id="users" role="tabpanel">
 
-                            <!-- ── Toolbar: search + group actions ── -->
                             <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3 bg-light p-3 rounded">
                                 <div class="d-flex align-items-center gap-2">
                                     <h6 class="fw-bold mb-0">Kullanıcı Listesi</h6>
-                                    <!-- ✅ NEW: Search/filter box -->
                                     <div class="input-group input-group-sm" style="width:240px;">
                                         <span class="input-group-text bg-white border-end-0">
                                             <i class="fa-solid fa-magnifying-glass text-muted"></i>
@@ -86,16 +80,11 @@
                                         </tr>
                                     </tbody>
                                 </table>
-                                <!-- ✅ NEW: no-results row shown by filterUsers() -->
                                 <div id="noResultsRow" class="text-center text-muted py-3 d-none">
                                     <i class="fa-solid fa-circle-info me-1"></i> Arama kriterine uyan kullanıcı bulunamadı.
                                 </div>
                             </div>
                         </div>
-
-                        <!-- ═══════════════════════════════════════════════════════ -->
-                        <!--  GROUPS TAB                                            -->
-                        <!-- ═══════════════════════════════════════════════════════ -->
                         <div class="tab-pane fade" id="groups" role="tabpanel">
                             <div class="row">
                                 <div class="col-md-5">
@@ -125,7 +114,7 @@
     <script>
         const API_BASE = "https://localhost:7124/api";
 
-        // ─── Auth Guard ────────────────────────────────────────────────────────
+
         const token = localStorage.getItem("JWToken");
 
         (function guardAdminPage() {
@@ -155,26 +144,20 @@
             }
         })();
 
-        // ─── Helpers ──────────────────────────────────────────────────────────
         const authHeader = () => ({ "Authorization": `Bearer ${token}` });
         const jsonHeader = () => ({ "Content-Type": "application/json", "Authorization": `Bearer ${token}` });
 
-        // ─── Select All (only visible rows) ───────────────────────────────────
         function toggleSelectAll() {
             const checked = document.getElementById("selectAll").checked;
-            // Only check/uncheck checkboxes in visible (non-hidden) rows
             document.querySelectorAll("#usersTableBody tr:not([style*='display: none']) .user-checkbox")
                 .forEach(cb => cb.checked = checked);
         }
-
-        // ─── ✅ NEW: Filter users by name or email ─────────────────────────────
         function filterUsers() {
             const query = document.getElementById("userSearchInput").value.toLowerCase().trim();
             const rows = document.querySelectorAll("#usersTableBody tr");
             let visibleCount = 0;
 
             rows.forEach(row => {
-                // Each row has data-name and data-email attributes set when rendered
                 const name = (row.dataset.name || "").toLowerCase();
                 const email = (row.dataset.email || "").toLowerCase();
 
@@ -186,14 +169,11 @@
                 }
             });
 
-            // Show/hide the "no results" message
             document.getElementById("noResultsRow").classList.toggle("d-none", visibleCount > 0);
 
-            // Reset select-all checkbox when filter changes
             document.getElementById("selectAll").checked = false;
         }
 
-        // ─── Bulk Add to Group ────────────────────────────────────────────────
         async function bulkAddUsers() {
             const groupId = document.getElementById("bulkGroupSelect").value;
             const selected = Array.from(document.querySelectorAll(".user-checkbox:checked")).map(cb => cb.value);
@@ -214,7 +194,6 @@
             }
         }
 
-        // ─── Bulk Remove from Group ───────────────────────────────────────────
         async function bulkRemoveUsers() {
             const groupId = document.getElementById("bulkGroupSelect").value;
             const selected = Array.from(document.querySelectorAll(".user-checkbox:checked")).map(cb => cb.value);
@@ -235,7 +214,6 @@
             alert(`${successCount} kullanıcı gruptan başarıyla çıkarıldı.`);
         }
 
-        // ─── Load Users ───────────────────────────────────────────────────────
         async function loadUsers() {
             const res = await fetch(`${API_BASE}/Admin/users`, { headers: authHeader() });
 
@@ -249,7 +227,6 @@
 
             document.getElementById("usersTableBody").innerHTML = users.map(u => {
                 const isAdmin = u.roles.includes("Admin");
-                // ✅ data-name and data-email drive the filter
                 return `
                 <tr data-name="${(u.firstName + ' ' + u.lastName).toLowerCase()}" data-email="${(u.email || '').toLowerCase()}">
                     <td><input type="checkbox" class="user-checkbox" value="${u.id}"></td>
@@ -274,11 +251,9 @@
                 </tr>`;
             }).join('');
 
-            // Re-apply any active filter after reload
             filterUsers();
         }
 
-        // ─── Grant Admin ──────────────────────────────────────────────────────
         async function grantAdmin(id) {
             if (!confirm("Bu kullanıcıyı Admin yapmak istediğinize emin misiniz?")) return;
 
@@ -294,7 +269,6 @@
             }
         }
 
-        // ─── Remove Admin ─────────────────────────────────────────────────────
         async function removeAdmin(id) {
             if (!confirm("Bu kullanıcının Admin yetkisini kaldırmak istediğinize emin misiniz?")) return;
 
@@ -311,7 +285,6 @@
             }
         }
 
-        // ─── Delete User ──────────────────────────────────────────────────────
         async function deleteUser(id) {
             if (!confirm("Bu kullanıcıyı kalıcı olarak silmek istediğinize emin misiniz?")) return;
 
@@ -327,8 +300,6 @@
             }
         }
 
-        // ─── Load Groups ──────────────────────────────────────────────────────
-        // ✅ FIX: use /Group/list (all groups) instead of /Group/my-groups (only member groups)
         async function loadGroups() {
             const res = await fetch(`${API_BASE}/Group/list`, {
                 headers: authHeader()
@@ -356,7 +327,7 @@
                 groups.map(g => `<option value="${g.id}">${g.name}</option>`).join('');
         }
 
-        // ─── Create Group ─────────────────────────────────────────────────────
+
         async function createGroup() {
             const name = document.getElementById("newGroupName").value.trim();
 
@@ -376,7 +347,7 @@
             }
         }
 
-        // ─── Delete Group ─────────────────────────────────────────────────────
+
         async function deleteGroup(id) {
             if (!confirm("Bu grubu kalıcı olarak silmek istediğinize emin misiniz?")) return;
 
@@ -393,7 +364,7 @@
             }
         }
 
-        // ─── Init ─────────────────────────────────────────────────────────────
+
         document.addEventListener("DOMContentLoaded", () => {
             loadUsers();
             loadGroups();

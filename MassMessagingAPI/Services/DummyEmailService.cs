@@ -4,8 +4,7 @@
     {
         public Task SendEmailAsync(string toEmail, string subject, string body)
         {
-            // Gerçek mail atmak yerine linki konsola yazdırıyoruz.
-            // İleride buraya MailKit kodlarını yapıştıracaksın.
+
             Console.WriteLine("\n=========================================");
             Console.WriteLine($"DUMMY MAIL GÖNDERİLDİ!");
             Console.WriteLine($"Kime: {toEmail}");

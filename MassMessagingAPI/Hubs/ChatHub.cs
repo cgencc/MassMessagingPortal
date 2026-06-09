@@ -2,43 +2,35 @@
 using Microsoft.AspNetCore.SignalR;
 using System.Security.Claims;
 
-namespace MassMessagingAPI.Hubs // Kendi namespace'iniz
+namespace MassMessagingAPI.Hubs 
 {
-    // [Authorize] etiketi sayesinde sadece Token'ı olanlar bu merkeze bağlanabilir.
     [Authorize]
     public class ChatHub : Hub
     {
-        // 1. Birebir Mesaj Gönderme
         public async Task SendMessageToUser(string receiverId, string message)
         {
             var senderId = Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             var senderName = Context.User?.FindFirst("FirstName")?.Value;
 
-            // SignalR ile mesajı anlık olarak alıcıya iletiyoruz
             await Clients.User(receiverId).SendAsync("ReceiveMessage", senderId, senderName, message);
         }
 
-        // 2. Gruba Mesaj Gönderme (Toplu Mesajlaşma)
         public async Task SendMessageToGroup(string groupName, string message)
         {
             var senderName = Context.User?.FindFirst("FirstName")?.Value;
 
-            // Mesajı o gruba bağlı olan herkese anlık olarak iletiyoruz
             await Clients.Group(groupName).SendAsync("ReceiveGroupMessage", groupName, senderName, message);
         }
 
-        // 3. Kullanıcının bir gruba katılması
         public async Task JoinGroup(string groupName)
         {
             await Groups.AddToGroupAsync(Context.ConnectionId, groupName);
         }
 
-        // 4. Kullanıcının bir gruptan çıkması
         public async Task LeaveGroup(string groupName)
         {
             await Groups.RemoveFromGroupAsync(Context.ConnectionId, groupName);
         }
-        // Bağlı olan kullanıcıları tutan statik sözlük
         private static readonly HashSet<string> ConnectedUsers = new HashSet<string>();
 
         public override async Task OnConnectedAsync()
@@ -68,12 +60,10 @@ namespace MassMessagingAPI.Hubs // Kendi namespace'iniz
 
             if (isGroup)
             {
-                // Gruba yazıyorsa gruptaki herkese bildir
                 await Clients.Group(receiverId).SendAsync("ReceiveTyping", receiverId, senderName, true);
             }
             else if (!string.IsNullOrEmpty(receiverId))
             {
-                // Birebir sohbet
                 var myId = Context.User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
                 await Clients.User(receiverId).SendAsync("ReceiveTyping", myId, senderName, false);
             }

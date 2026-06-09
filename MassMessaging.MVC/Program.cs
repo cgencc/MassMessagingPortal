@@ -1,6 +1,5 @@
 ﻿var builder = WebApplication.CreateBuilder(args);
 
-// Pure MVC frontend — just serves views. All data goes through JS fetch() to the API.
 builder.Services.AddControllersWithViews();
 
 var app = builder.Build();

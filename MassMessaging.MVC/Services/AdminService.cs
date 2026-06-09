@@ -18,7 +18,7 @@ namespace MassMessaging.MVC.Services
                 new AuthenticationHeaderValue("Bearer", token);
         }
 
-        // ✅ FIX: Returns empty list instead of throwing on null/error
+
         public async Task<List<object>> GetAllUsersAsync(string token)
         {
             SetToken(token);

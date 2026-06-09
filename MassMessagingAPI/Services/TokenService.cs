@@ -20,7 +20,6 @@ namespace MassMessagingAPI.Services
 
         public async Task<string> GenerateTokenAsync(AppUser user)
         {
-            // Kullanıcının rollerini Identity tablosundan çekiyoruz
             var userRoles = await _userManager.GetRolesAsync(user);
 
             var authClaims = new List<Claim>
@@ -32,7 +31,6 @@ namespace MassMessagingAPI.Services
                 new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
             };
 
-            // Kullanıcının sahip olduğu tüm rolleri token içine gömüyoruz
             foreach (var role in userRoles)
             {
                 authClaims.Add(new Claim(ClaimTypes.Role, role));

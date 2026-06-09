@@ -1,4 +1,4 @@
-﻿using MassMessagingAPI.Data; // AppDbContext için gerekli
+﻿using MassMessagingAPI.Data;
 using MassMessagingAPI.DTOs;
 using MassMessagingAPI.Models;
 using Microsoft.AspNetCore.Authorization;
@@ -15,12 +15,12 @@ namespace MassMessagingAPI.Controllers
     public class UserController : ControllerBase
     {
         private readonly UserManager<AppUser> _userManager;
-        private readonly AppDbContext _context; // Context tanımı eklendi
+        private readonly AppDbContext _context; 
 
         public UserController(UserManager<AppUser> userManager, AppDbContext context)
         {
             _userManager = userManager;
-            _context = context; // Enjeksiyon tamamlandı
+            _context = context; 
         }
 
         [HttpGet("list")]

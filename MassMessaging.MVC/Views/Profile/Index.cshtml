@@ -87,7 +87,6 @@
         const API_BASE = "https://localhost:7124/api";
         const token    = localStorage.getItem("JWToken");
 
-        // Snapshot of original values so we can cancel
         let originalValues = {};
 
         document.addEventListener("DOMContentLoaded", async () => {
@@ -95,7 +94,6 @@
             await loadProfile();
         });
 
-        // --- PROFİL BİLGİLERİ İŞLEMLERİ ---
         async function loadProfile() {
             try {
                 const res = await fetch(`${API_BASE}/User/profile`, {
@@ -110,7 +108,6 @@
                 document.getElementById("lastName").value      = user.lastName;
                 document.getElementById("emailField").value    = user.email;
 
-                // Store snapshot for cancel
                 originalValues = { firstName: user.firstName, lastName: user.lastName, email: user.email };
             } catch {
                 document.getElementById("userName").innerText = "Hata oluştu!";
@@ -176,7 +173,6 @@
             setTimeout(() => el.style.display = "none", 4000);
         }
 
-        // --- ŞİFRE DEĞİŞTİRME İŞLEMLERİ ---
         async function changeProfilePassword() {
             const oldPass = document.getElementById("oldPasswordInput").value;
             const newPass = document.getElementById("newPasswordInput").value;
@@ -231,7 +227,7 @@
             pAlert.className = `alert alert-${type}`;
             pAlert.innerText = msg;
             pAlert.classList.remove("d-none");
-            setTimeout(() => pAlert.classList.add("d-none"), 5000); // 5 saniye sonra uyarıyı gizle
+            setTimeout(() => pAlert.classList.add("d-none"), 5000);
         }
     </script>
 }

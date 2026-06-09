@@ -27,7 +27,6 @@
             white-space: nowrap;
         }
 
-    /* Online presence dot */
     .presence-dot {
         width: 9px;
         height: 9px;
@@ -41,7 +40,6 @@
             background: #28a745;
         }
 
-    /* Unread badge */
     .unread-badge {
         background: #dc3545;
         color: #fff;
@@ -127,7 +125,6 @@
         font-size: 0.9rem;
     }
 
-    /* Search bar */
     #searchPanel {
         border-bottom: 1px solid #eee;
         background: #fff;
@@ -154,7 +151,6 @@
         font-weight: 600;
     }
 
-    /* Load more */
     #loadMoreBtn {
         display: none;
     }
@@ -162,13 +158,11 @@
 
 <div class="row g-0 mt-3" style="height: 88vh;">
 
-    <!-- LEFT: Chat list -->
     <div class="col-md-3 border-end bg-white d-flex flex-column">
         <div class="p-3 border-bottom bg-light d-flex align-items-center justify-content-between">
             <span class="fw-bold"><i class="fa-solid fa-comments text-primary me-2"></i>Sohbetler</span>
         </div>
 
-        <!-- Search bar -->
         <div id="searchPanel">
             <div class="input-group input-group-sm">
                 <span class="input-group-text bg-white border-end-0"><i class="fa-solid fa-magnifying-glass text-muted"></i></span>
@@ -177,20 +171,15 @@
             </div>
         </div>
 
-        <!-- Search results (shown while searching) -->
         <div id="searchResults" style="overflow-y:auto; flex:1; display:none;"></div>
 
-        <!-- Normal chat list -->
         <div id="chatList" style="overflow-y:auto; flex:1;"></div>
     </div>
 
-    <!-- RIGHT: Chat area -->
     <div class="col-md-9 d-flex flex-column bg-white">
 
-        <!-- Admin announcement pin -->
         <div id="adminPin" class="alert alert-warning m-0 py-2 px-3" style="display:none; border-radius:0; font-size:0.85rem;"></div>
 
-        <!-- Chat header with typing indicator -->
         <div id="chatHeader" class="p-3 border-bottom bg-light fw-semibold text-muted d-flex align-items-center justify-content-between" style="font-size:0.9rem;">
             <div>
                 <span id="chatHeaderName">Bir sohbet seçin</span>
@@ -198,14 +187,12 @@
             </div>
         </div>
 
-        <!-- Load more old messages -->
         <div class="text-center py-1 bg-light border-bottom">
             <button id="loadMoreBtn" class="btn btn-sm btn-outline-secondary px-4" onclick="loadHistory(activeId, true)">
                 <i class="fa-solid fa-clock-rotate-left me-1"></i>Daha eski mesajlar
             </button>
         </div>
 
-        <!-- Messages -->
         <div id="chatBox">
             <div id="chatEmptyState">
                 <i class="fa-solid fa-comments fa-2x mb-2 d-block"></i>
@@ -213,7 +200,6 @@
             </div>
         </div>
 
-        <!-- Input bar -->
         <div class="p-2 border-top bg-light d-flex align-items-center gap-2">
             <input type="file" id="mediaInput" accept="image/*,video/*,.pdf" style="display:none" onchange="handleFileSelect(event)">
             <button class="btn btn-outline-secondary btn-sm" onclick="document.getElementById('mediaInput').click()" title="Dosya ekle">
@@ -241,21 +227,18 @@
 
           if (!token) window.location.href = "/Auth/Login";
 
-          // --- YENİ EKLENEN: ADMİN KONTROLÜ ---
           let isAdmin = false;
           try {
               const payload = JSON.parse(atob(token.split('.')[1]));
               const role = payload["http://schemas.microsoft.com/ws/2008/06/identity/claims/role"] || payload["role"];
               isAdmin = role === "Admin" || (Array.isArray(role) && role.includes("Admin"));
           } catch (e) { }
-        // ── Global state ──────────────────────────────────────────────────────
         let activeId = null, isGroup = false, activeName = "";
         let connection = null, typingTimer;
         let currentPage = 1, isLoading = false, hasMore = true;
-        let onlineUsers = new Set();     // ✅ tracks online presence
+        let onlineUsers = new Set();   
         let searchTimer = null;
 
-        // ── Boot ──────────────────────────────────────────────────────────────
         document.addEventListener("DOMContentLoaded", async () => {
             if (Notification.permission !== "granted") Notification.requestPermission();
             if (token) await initApp();
@@ -266,24 +249,21 @@
                 .withUrl(HUB_URL, { accessTokenFactory: () => token })
                 .withAutomaticReconnect()
                 .build();
-                // ✅ Mesaj Silinme Dinleyicisi (Biri mesaj sildiğinde herkesten anında kaybolur)
             connection.on("MessageDeleted", (deletedMsgId) => {
                 const msgContent = document.getElementById(`msg-content-${deletedMsgId}`);
                 if (msgContent) {
                     msgContent.closest(".msg-bubble").remove();
                 }
             });
-            // ✅ Gruptan Atılma Dinleyicisi
-        // ✅ Gruptan Atılma Dinleyicisi (Sol listeden de anında kaldırır)
+
                 connection.on("RemovedFromGroup", (kickedGroupId) => {
 
-                    // 1. Sol taraftaki listeden ilgili grubun HTML elemanını bul ve tamamen sil
+
                     const groupListItem = document.getElementById(`chat-item-${kickedGroupId}`);
                     if (groupListItem) {
                         groupListItem.remove();
                     }
 
-                    // 2. Eğer kullanıcı o esnada tam da atıldığı grubun içindeyse ekranı kilitle
                     if (isGroup && activeId == kickedGroupId) {
                         activeId = null;
                         isGroup = false;
@@ -294,41 +274,33 @@
                                 <h5 class="text-muted">Bu gruptan çıkarıldınız.</h5>
                             </div>`;
 
-                        // Mesaj yazma alanlarını devre dışı bırak
                         document.getElementById("messageInput").disabled = true;
                         document.getElementById("recordBtn").disabled = true;
                     }
 
                     showToast("Bir gruptan çıkarıldınız!");
                 });
-
-            // Incoming DM
-        // Incoming DM
         connection.on("ReceiveMessage", (sId, sName, content) => {
             if (document.hidden) new Notification("Yeni Mesaj!", { body: `${sName}: ${content}` });
             if (!isGroup && activeId === sId) {
                 renderMessage(sName, content, false, null, null, true);
-                markConversationRead(sId, false); // <--- BURAYA , false EKLENDİ
+                markConversationRead(sId, false); 
             } else {
                 incrementUnread(sId);
                 showToast(`📩 ${sName}: ${content}`);
             }
         });
 
-            // Incoming group message
             connection.on("ReceiveGroupMessage", (gName, sName, content) => {
                 if (document.hidden) new Notification(`Yeni Mesaj: ${gName}`, { body: `${sName}: ${content}` });
                 if (isGroup && activeName === gName) {
                     renderMessage(sName, content, false, null, null, true);
                 } else {
-                    // find group list item by name to badge it
                     const el = document.querySelector(`[data-group-name="${gName}"]`);
                     if (el) incrementUnreadOnElement(el);
                     showToast(`👥 [${gName}] ${sName}: ${content}`);
                 }
             });
-
-            // Admin announcement
             connection.on("ReceiveAdminMessage", (content) => {
                 const pin = document.getElementById("adminPin");
                 pin.innerHTML = `<i class='fa-solid fa-bullhorn me-2'></i><strong>Yönetici Duyurusu:</strong> ${escapeHtml(content)}
@@ -336,7 +308,6 @@
                 pin.style.display = "block";
             });
 
-            // Typing indicator
             connection.on("ReceiveTyping", (id, name, isGroupMsg) => {
                 if (isGroupMsg === isGroup && id === activeId) {
                     const el = document.getElementById("typingStatus");
@@ -347,7 +318,6 @@
                 }
             });
 
-            // ✅ Online presence
             connection.on("UserStatusChanged", (userId, isOnline) => {
                 if (isOnline) onlineUsers.add(userId);
                 else onlineUsers.delete(userId);
@@ -360,13 +330,11 @@
             } catch (err) { console.error("SignalR hatası:", err); }
         }
 
-        // ── Typing trigger ────────────────────────────────────────────────────
         document.getElementById("messageInput").addEventListener("input", () => {
             if (activeId && connection?.state === signalR.HubConnectionState.Connected)
                 connection.invoke("SendTypingStatus", activeId, isGroup).catch(console.error);
         });
 
-        // ── Load chat list ────────────────────────────────────────────────────
         async function loadLists() {
             const list = document.getElementById("chatList");
             list.innerHTML = `<div class="text-center p-3"><div class="spinner-border spinner-border-sm text-primary"></div></div>`;
@@ -405,13 +373,11 @@
                     });
                 }
 
-                // Load unread counts in background
                 loadAllUnreadCounts(users, groups);
 
             } catch(e) { list.innerHTML = `<div class="p-3 text-danger small">Listeler yüklenemedi.</div>`; }
         }
 
-        // ── Unread counts ─────────────────────────────────────────────────────
         async function loadAllUnreadCounts(users, groups) {
             const fetches = [
                 ...users.map(u => fetchUnread(u.id, false)),
@@ -453,12 +419,10 @@
         }
 
         function markConversationRead(id, isGroup) {
-                    // 1. Ekrandaki (UI) rozeti sıfırla
                     const badgeId = isGroup ? `badge-g-${id}` : `badge-${id}`;
                     const el = document.getElementById(badgeId);
                     if (el) { el.textContent = "0"; el.classList.remove("visible"); }
 
-                    // 2. Veritabanında (API) kalıcı olarak okundu işaretle
                     try {
                         fetch(`${API_BASE}/Message/mark-conversation-read/${id}?isGroup=${isGroup}`, {
                             method: "PUT",
@@ -467,13 +431,11 @@
                     } catch (e) { console.error("Okundu işaretlenemedi", e); }
                 }
 
-        // ── Presence dots ─────────────────────────────────────────────────────
         function updatePresenceDot(userId, isOnline) {
             const dot = document.getElementById(`dot-${userId}`);
             if (dot) dot.classList.toggle("online", isOnline);
         }
 
-        // ── Start chat ────────────────────────────────────────────────────────
         function startChat(id, group, element, name) {
              activeId = id;
              isGroup = group; activeName = name;
@@ -482,13 +444,11 @@
              if (element) element.classList.add('active-chat');
              document.getElementById("chatHeaderName").innerText = name;
 
-             // Tıkladığımız an veritabanını da güncelliyoruz
              markConversationRead(id, group);
 
              loadHistory(id);
          }
 
-        // ── Message history ───────────────────────────────────────────────────
         async function loadHistory(id, isLoadMore = false) {
             if (!id || isLoading || (!hasMore && isLoadMore)) return;
             isLoading = true;
@@ -516,11 +476,9 @@
                 msgs.forEach(m => renderMessage(m.senderName, m.content, m.isMine, m.sentDate, m.id, !isLoadMore));
                 currentPage++;
 
-                // After load-more, keep scroll position so messages don't jump
                 if (isLoadMore) chatBox.scrollTop = chatBox.scrollHeight - prevHeight;
                 else chatBox.scrollTop = chatBox.scrollHeight;
 
-                // Show "load more" only if a full page came back (more may exist)
                 loadMoreBtn.style.display = msgs.length === 20 ? "inline-block" : "none";
 
             } catch(e) { chatBox.innerHTML = '<div class="text-center p-3 text-danger">Hata!</div>'; }
@@ -535,7 +493,6 @@
                     const isMe     = (isMine === true || isMine === "true");
                     const bubbleClass = isMe ? "msg-me" : "msg-other";
 
-                    // YENİ EKLENEN: Sadece kendisi ise düzenlesin, ama Adminse veya Kendisiyse silebilsin
                     const actions = (isMe || isAdmin) ? `
                         <div class="d-flex gap-2 justify-content-end msg-actions">
                             ${isMe ? `<button onclick="editMsg(${messageId}, '${escapeHtml(content)}')" class="text-dark"><i class="fa-solid fa-pen-to-square"></i></button>` : ''}
@@ -554,7 +511,6 @@
                     else { chatBox.insertAdjacentHTML("afterbegin", html); }
                 }
 
-        // ── Send / Edit / Delete ──────────────────────────────────────────────
         async function sendMessage(contentOverride = null) {
             const input = document.getElementById("messageInput");
             const text  = contentOverride || input.value.trim();
@@ -569,8 +525,6 @@
 
         function deleteMsg(id) {
                     if (!confirm("Silmek istediğine emin misin?")) return;
-
-                    // Hocanın projede görmek isteyeceği jQuery AJAX kullanımı
                     $.ajax({
                         url: `${API_BASE}/Message/delete/${id}`,
                         type: 'DELETE',
@@ -600,7 +554,6 @@
             if (res.ok) { document.getElementById(`msg-content-${id}`).innerText = newContent; showToast("Mesaj güncellendi."); }
         }
 
-        // ── File upload ───────────────────────────────────────────────────────
         async function handleFileSelect(e) {
             const file = e.target.files[0];
             if (!file) return;
@@ -610,7 +563,6 @@
             const data = await res.json();
             sendMessage(`<img src="https://localhost:7124${data.url}" style="max-width:200px; border-radius:8px;">`);
         }
-        // ── Voice Record (Sesli Mesaj) ────────────────────────────────────────
         let mediaRecorder;
         let audioChunks = [];
         let isRecording = false;
@@ -622,9 +574,7 @@
             }
 
             if (!isRecording) {
-                // KAYDA BAŞLA
                 try {
-                    // Mikrofon izni iste
                     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
                     mediaRecorder = new MediaRecorder(stream);
                     audioChunks = [];
@@ -634,18 +584,16 @@
                     };
 
                     mediaRecorder.onstop = async () => {
-                        // Kayıt bitince Blob'a (dosyaya) çevir ve API'ye yolla
+
                         const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
                         await uploadAudioBlob(audioBlob);
 
-                        // Mikrofonu geri kapat
                         stream.getTracks().forEach(track => track.stop());
                     };
 
                     mediaRecorder.start();
                     isRecording = true;
 
-                    // Buton tasarımını değiştir (kaydediyor efekti)
                     const btn = document.getElementById("recordBtn");
                     btn.classList.replace("btn-outline-danger", "btn-danger");
                     btn.innerHTML = '<i class="fa-solid fa-stop"></i> Kaydediliyor...';
@@ -654,11 +602,9 @@
                     showToast("Mikrofona erişilemedi! Tarayıcıdan izin verdiğinize emin olun.");
                 }
             } else {
-                // KAYDI BİTİR VE GÖNDER
+
                 mediaRecorder.stop();
                 isRecording = false;
-
-                // Butonu eski haline getir
                 const btn = document.getElementById("recordBtn");
                 btn.classList.replace("btn-danger", "btn-outline-danger");
                 btn.innerHTML = '<i class="fa-solid fa-microphone"></i>';
@@ -668,7 +614,6 @@
 
         async function uploadAudioBlob(blob) {
             const formData = new FormData();
-            // Backend'in kabul etmesi için isim ve uzantı veriyoruz
             formData.append("file", blob, "voice_message.webm");
 
             try {
@@ -680,7 +625,6 @@
                 const data = await res.json();
 
                 if(res.ok) {
-                    // Yüklenen ses dosyasının URL'ini HTML audio etiketi olarak sohbet penceresine yolla
                     const audioHtml = `<audio controls src="https://localhost:7124${data.url}" style="height: 40px; max-width: 220px; outline: none; border-radius: 8px;"></audio>`;
                     sendMessage(audioHtml);
                 } else {
@@ -692,7 +636,6 @@
             }
         }
 
-        // ── Search ────────────────────────────────────────────────────────────
         function onSearchInput(val) {
             clearTimeout(searchTimer);
             const clearBtn = document.getElementById("clearSearch");
@@ -702,7 +645,7 @@
                 showSearchPanel(false);
                 return;
             }
-            searchTimer = setTimeout(() => doSearch(val.trim()), 400); // 400ms debounce
+            searchTimer = setTimeout(() => doSearch(val.trim()), 400); 
         }
 
         async function doSearch(q) {
@@ -725,7 +668,6 @@
 
         function openSearchResult(targetId, isGroupResult) {
             clearSearch();
-            // Find the list item and click it
             const selector = isGroupResult ? `[data-group-id="${targetId}"]` : `[data-user-id="${targetId}"]`;
             const item = document.querySelector(selector);
             if (item) item.click();
@@ -742,7 +684,6 @@
             document.getElementById("chatList").style.display    = show ? "none"  : "block";
         }
 
-        // ── Helpers ───────────────────────────────────────────────────────────
         function escapeHtml(str) {
             return String(str).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
         }

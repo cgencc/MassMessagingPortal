@@ -40,7 +40,6 @@ namespace MassMessagingAPI.Controllers
             var senderName = User.FindFirst("FirstName")?.Value;
             if (senderId == null) return Unauthorized("Kullanıcı bulunamadı.");
 
-            // ✅ YENİ EKLENEN: Gruptan çıkarılan birinin mesaj atmasını engelleyen güvenlik kalkanı
             if (model.GroupId.HasValue)
             {
                 var isMember = await _context.UserGroups
@@ -107,8 +106,6 @@ namespace MassMessagingAPI.Controllers
             return Ok(messages);
         }
 
-        // ✅ NEW: Search through messages the current user is part of
-        // GET /api/Message/search?q=hello&page=1
         [HttpGet("search")]
         public async Task<IActionResult> SearchMessages([FromQuery] string q, [FromQuery] int page = 1)
         {
@@ -118,7 +115,6 @@ namespace MassMessagingAPI.Controllers
             int pageSize = 30;
             var myId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
 
-            // Search messages the user sent or received (DMs + group messages in their groups)
             var myGroupIds = await _context.UserGroups
                 .Where(ug => ug.UserId == myId)
                 .Select(ug => ug.GroupId)
@@ -171,7 +167,6 @@ namespace MassMessagingAPI.Controllers
             var myId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             var isAdmin = User.IsInRole("Admin");
 
-            // Mesajı silmeye çalışan kişi mesajın sahibi değilse VE admin değilse engelle
             if (msg == null || (msg.SenderId != myId && !isAdmin))
                 return Unauthorized(new { Message = "Bu mesajı silme yetkiniz yok." });
 
@@ -179,7 +174,6 @@ namespace MassMessagingAPI.Controllers
             await _messageRepository.UpdateAsync(msg);
             await _context.SaveChangesAsync();
 
-            // SignalR ile mesajın silindiğini anlık olarak herkese bildir
             if (msg.GroupId != null)
             {
                 var group = await _groupRepository.GetByIdAsync(msg.GroupId.Value);
@@ -188,7 +182,6 @@ namespace MassMessagingAPI.Controllers
             }
             else
             {
-                // Birebir sohbetlerde iki tarafa da silinme komutunu gönder
                 await _hubContext.Clients.User(msg.SenderId).SendAsync("MessageDeleted", id);
                 if (!string.IsNullOrEmpty(msg.ReceiverId))
                 {
@@ -210,8 +203,6 @@ namespace MassMessagingAPI.Controllers
             return Ok();
         }
 
-        // ✅ NEW: Get unread count for a specific conversation (DM or group)
-        // GET /api/Message/unread-count/{id}   (id = userId or groupId)
         [HttpGet("unread-count/{id}")]
         public async Task<IActionResult> GetUnreadCount(string id)
         {
@@ -238,7 +229,6 @@ namespace MassMessagingAPI.Controllers
         {
             if (file == null || file.Length == 0) return BadRequest("Dosya yok.");
 
-            // BURAYI GÜNCELLEDİK: .webm, .ogg, .mp3, .wav eklendi
             var allowedExtensions = new[] { ".jpg", ".png", ".mp4", ".pdf", ".webm", ".ogg", ".mp3", ".wav" };
 
             var ext = Path.GetExtension(file.FileName).ToLower();
@@ -265,12 +255,12 @@ namespace MassMessagingAPI.Controllers
             if (isGroup)
             {
                 if (!int.TryParse(id, out int groupId)) return BadRequest();
-                // Gruptaki benim dışımdaki kişilerin yazdığı okunmamış mesajlar
+
                 unreadMessages = _context.Messages.Where(m => !m.IsDeleted && !m.IsRead && m.GroupId == groupId && m.SenderId != myId);
             }
             else
             {
-                // Birebir sohbetteki okunmamış mesajlar
+
                 unreadMessages = _context.Messages.Where(m => !m.IsDeleted && !m.IsRead && m.SenderId == id && m.ReceiverId == myId);
             }
 
@@ -280,7 +270,7 @@ namespace MassMessagingAPI.Controllers
             {
                 foreach (var msg in messagesToUpdate)
                 {
-                    msg.IsRead = true; // Veritabanında kalıcı olarak okundu yapıyoruz
+                    msg.IsRead = true; 
                 }
                 await _context.SaveChangesAsync();
             }

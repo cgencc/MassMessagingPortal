@@ -59,7 +59,6 @@
             const token = localStorage.getItem("JWToken");
             const actionButtons = document.getElementById("homeActionButtons");
 
-            // Eğer tarayıcıda giriş token'ı varsa butonları değiştiriyoruz
             if (token && actionButtons) {
                 actionButtons.innerHTML = `
                     <a href="/Chat/Index" class="btn btn-primary btn-lg px-5 rounded-pill shadow-sm">

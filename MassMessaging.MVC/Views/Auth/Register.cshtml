@@ -86,7 +86,6 @@
                     setTimeout(() => { window.location.href = "/Auth/Login"; }, 2000);
                 } else {
                     messageBox.className = "alert alert-danger";
-                    // Identity'den gelen hata listesini (array) birleştirip gösteriyoruz
                     let errorMessage = "Kayıt başarısız: ";
                     if (Array.isArray(result)) {
                         errorMessage += result.map(err => err.description).join(", ");

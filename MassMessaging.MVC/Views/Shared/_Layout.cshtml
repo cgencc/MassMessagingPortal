@@ -39,7 +39,6 @@
             const token = localStorage.getItem("JWToken");
             const dynamicNav = document.getElementById("dynamicNav");
 
-            // Tema Kontrolü
             const currentTheme = localStorage.getItem("theme");
             if (currentTheme === "dark") {
                 document.body.classList.add("dark-theme");
@@ -55,7 +54,6 @@
                     localStorage.removeItem("JWToken");
                 }
 
-                // Menü Oluşturma (Tema Değiştirme Butonu Eklendi)
                 let html = `<li class="nav-item me-2 d-flex align-items-center">
                                 <button id="themeToggle" class="btn btn-link nav-link text-dark" onclick="toggleTheme()" title="Temayı Değiştir">
                                     <i class="fa-solid fa-moon"></i>
@@ -68,11 +66,9 @@
                 html += `<li class="nav-item"><button onclick="logoutApp()" class="btn btn-outline-danger btn-sm rounded-pill px-3 mt-1">Çıkış</button></li>`;
                 dynamicNav.innerHTML = html;
 
-                // Tema ikonunu mevcut temaya göre güncelle
                 updateThemeIcon();
 
             } else {
-                // Giriş yapmamış kullanıcılar için de tema butonu eklenebilir
                 dynamicNav.innerHTML = `
                     <li class="nav-item me-2 d-flex align-items-center">
                         <button id="themeToggle" class="btn btn-link nav-link text-dark" onclick="toggleTheme()">
@@ -101,9 +97,9 @@
             const icon = document.querySelector("#themeToggle i");
             if (icon) {
                 if (document.body.classList.contains("dark-theme")) {
-                    icon.className = "fa-solid fa-sun text-warning"; // Koyu temadaysa güneş ikonu çıksın
+                    icon.className = "fa-solid fa-sun text-warning"; 
                 } else {
-                    icon.className = "fa-solid fa-moon"; // Açık temadaysa ay ikonu çıksın
+                    icon.className = "fa-solid fa-moon"; 
                 }
             }
         }

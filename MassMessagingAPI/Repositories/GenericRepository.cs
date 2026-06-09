@@ -25,7 +25,6 @@ namespace MassMessagingAPI.Repositories
             return await _dbSet.FindAsync(id);
         }
 
-        // Include desteği eklenmiş hali
         public async Task<IEnumerable<T>> FindAsync(Expression<Func<T, bool>> predicate, params Expression<Func<T, object>>[] includes)
         {
             IQueryable<T> query = _dbSet;

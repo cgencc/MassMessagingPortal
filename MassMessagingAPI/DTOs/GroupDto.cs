@@ -11,7 +11,6 @@
         public int GroupId { get; set; }
     }
 
-    // ✅ Used by both add-users-bulk and remove-users-bulk
     public class BulkUserGroupDto
     {
         public int GroupId { get; set; }

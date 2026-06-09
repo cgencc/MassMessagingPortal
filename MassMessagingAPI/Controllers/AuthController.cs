@@ -5,7 +5,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
-using System.Web; // HttpUtility için gerekli
+using System.Web;
 
 namespace MassMessagingAPI.Controllers
 {
@@ -15,9 +15,8 @@ namespace MassMessagingAPI.Controllers
     {
         private readonly UserManager<AppUser> _userManager;
         private readonly ITokenService _tokenService;
-        private readonly IEmailService _emailService; // Email servisini buraya ekledik
+        private readonly IEmailService _emailService; 
 
-        // Constructor'ı (yapıcı metot) güncelledik
         public AuthController(UserManager<AppUser> userManager, ITokenService tokenService, IEmailService emailService)
         {
             _userManager = userManager;
@@ -57,27 +56,20 @@ namespace MassMessagingAPI.Controllers
 
             return Unauthorized(new { Message = "E-posta veya şifre hatalı!" });
         }
-
-        // --- YENİ EKLENEN METOTLAR ---
-
         [HttpPost("forgot-password")]
         public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordDto model)
         {
             var user = await _userManager.FindByEmailAsync(model.Email);
             if (user == null)
             {
-                // Güvenlik gereği "Böyle bir kullanıcı yok" demiyoruz.
                 return Ok(new { Message = "Şifre sıfırlama bağlantısı gönderildi (Eğer e-posta doğruysa)." });
             }
 
             var token = await _userManager.GeneratePasswordResetTokenAsync(user);
-            // Linkin bozulmaması için token'ı encode ediyoruz
             var encodedToken = HttpUtility.UrlEncode(token);
 
-            // DİKKAT: Buradaki 7155 portunu MVC projenin çalıştığı port ile değiştir!
             var resetLink = $"https://localhost:7261/Auth/ResetPassword?email={model.Email}&token={encodedToken}";
 
-            // Dummy (Sahte) Mail Servisimiz bu linki konsola yazdıracak
             await _emailService.SendEmailAsync(model.Email, "MassPortal - Şifre Sıfırlama", resetLink);
 
             return Ok(new { Message = "Şifre sıfırlama bağlantısı gönderildi (Eğer e-posta doğruysa)." });

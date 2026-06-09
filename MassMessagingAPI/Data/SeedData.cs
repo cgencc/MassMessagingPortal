@@ -10,7 +10,6 @@ namespace MassMessagingAPI.Data
             var roleManager = serviceProvider.GetRequiredService<RoleManager<IdentityRole>>();
             var userManager = serviceProvider.GetRequiredService<UserManager<AppUser>>();
 
-            // 1. Rolleri Oluştur
             string[] roleNames = { "Admin", "User" };
             foreach (var roleName in roleNames)
             {
@@ -20,7 +19,6 @@ namespace MassMessagingAPI.Data
                 }
             }
 
-            // 2. İlk Kurucu Admin'i Oluştur (Eğer yoksa)
             string adminEmail = "admin@portal.com";
             var adminUser = await userManager.FindByEmailAsync(adminEmail);
 
@@ -38,7 +36,6 @@ namespace MassMessagingAPI.Data
                 var createPowerUser = await userManager.CreateAsync(adminUser, "Admin123!");
                 if (createPowerUser.Succeeded)
                 {
-                    // Admin rolünü ata
                     await userManager.AddToRoleAsync(adminUser, "Admin");
                 }
             }

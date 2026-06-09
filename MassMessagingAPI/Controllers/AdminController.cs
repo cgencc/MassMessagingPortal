@@ -81,16 +81,12 @@ namespace MassMessagingAPI.Controllers
             var group = await _context.Groups.FindAsync(groupId);
             if (group == null) return NotFound(new { Message = "Grup bulunamadı." });
 
-            // ✅ FIX: Delete related records first to avoid FK constraint 500 error.
-            // 1. Remove all messages that belong to this group
             var groupMessages = _context.Messages.Where(m => m.GroupId == groupId);
             _context.Messages.RemoveRange(groupMessages);
 
-            // 2. Remove all UserGroup memberships for this group
             var userGroups = _context.UserGroups.Where(ug => ug.GroupId == groupId);
             _context.UserGroups.RemoveRange(userGroups);
 
-            // 3. Now safe to delete the group itself
             _context.Groups.Remove(group);
 
             await _context.SaveChangesAsync();

@@ -13,11 +13,9 @@ using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// ─── Database ─────────────────────────────────────────────────────────────────
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-// ─── Identity ─────────────────────────────────────────────────────────────────
 builder.Services.AddIdentity<AppUser, IdentityRole>(options =>
 {
     options.Password.RequireDigit = true;
@@ -29,7 +27,6 @@ builder.Services.AddIdentity<AppUser, IdentityRole>(options =>
 .AddEntityFrameworkStores<AppDbContext>()
 .AddDefaultTokenProviders();
 
-// ─── JWT Authentication ───────────────────────────────────────────────────────
 var jwtKey = builder.Configuration["Jwt:Key"]!;
 var jwtIssuer = builder.Configuration["Jwt:Issuer"]!;
 var jwtAudience = builder.Configuration["Jwt:Audience"]!;
@@ -52,7 +49,6 @@ builder.Services.AddAuthentication(options =>
         IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey))
     };
 
-    // ✅ Required: SignalR passes the JWT via ?access_token= query string
     options.Events = new JwtBearerEvents
     {
         OnMessageReceived = context =>
@@ -68,15 +64,11 @@ builder.Services.AddAuthentication(options =>
     };
 });
 
-// ─── Repositories & Services ──────────────────────────────────────────────────
 builder.Services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepository<>));
 builder.Services.AddScoped<ITokenService, TokenService>();
 
-// ─── SignalR ──────────────────────────────────────────────────────────────────
 builder.Services.AddSignalR();
 
-// ─── CORS ─────────────────────────────────────────────────────────────────────
-// ✅ Allows the MVC frontend to call this API from the browser
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowMVC", policy =>
@@ -86,11 +78,10 @@ builder.Services.AddCors(options =>
                 "http://localhost:5296")
               .AllowAnyHeader()
               .AllowAnyMethod()
-              .AllowCredentials(); // required for SignalR
+              .AllowCredentials(); 
     });
 });
 
-// ─── Swagger ──────────────────────────────────────────────────────────────────
 builder.Services.AddControllers();
 builder.Services.AddScoped<IEmailService, DummyEmailService>();
 builder.Services.AddEndpointsApiExplorer();
@@ -119,14 +110,11 @@ builder.Services.AddSwaggerGen(c =>
 
 var app = builder.Build();
 
-// ─── Seed Database ────────────────────────────────────────────────────────────
-// Creates Admin + User roles and the default admin@portal.com account on startup
 using (var scope = app.Services.CreateScope())
 {
     await SeedData.InitializeAsync(scope.ServiceProvider);
 }
 
-// ─── Middleware Pipeline ──────────────────────────────────────────────────────
 app.UseMiddleware<ExceptionMiddleware>();
 
 if (app.Environment.IsDevelopment())
@@ -138,7 +126,6 @@ if (app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 app.UseStaticFiles();
 
-// ✅ CORS must come before Auth
 app.UseCors("AllowMVC");
 
 app.UseAuthentication();
