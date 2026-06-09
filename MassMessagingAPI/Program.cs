@@ -78,24 +78,29 @@ builder.Services.AddCors(options =>
                 "http://localhost:5296")
               .AllowAnyHeader()
               .AllowAnyMethod()
-              .AllowCredentials(); 
+              .AllowCredentials();
     });
 });
 
 builder.Services.AddControllers();
 builder.Services.AddScoped<IEmailService, DummyEmailService>();
 builder.Services.AddEndpointsApiExplorer();
+
 builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1", new OpenApiInfo { Title = "MassMessaging API", Version = "v1" });
+
+    // GÜNCELLEDİĞİMİZ KISIM BURASI: Artık sadece token'ı yapıştırman yeterli!
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
-        Description = "JWT Bearer token. Örnek: 'Bearer {token}'",
+        Description = "Lütfen aldığınız Token'ı direkt buraya yapıştırın. (Başına 'Bearer ' yazmanıza GEREK YOKTUR, sistem otomatik ekler)",
         Name = "Authorization",
         In = ParameterLocation.Header,
-        Type = SecuritySchemeType.ApiKey,
-        Scheme = "Bearer"
+        Type = SecuritySchemeType.Http, // ApiKey yerine Http yaptık
+        Scheme = "bearer", // Swagger otomatik Bearer ekleyecek
+        BearerFormat = "JWT"
     });
+
     c.AddSecurityRequirement(new OpenApiSecurityRequirement
     {
         {
