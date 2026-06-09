@@ -42,22 +42,22 @@ namespace MassMessagingAPI.Controllers
             return Ok(new { Message = $"{dto.Name} grubu başarıyla oluşturuldu.", GroupId = group.Id });
         }
 
-        // ─── ADMİN PANELİ İÇİN (SİSTEMDEKİ HER GRUBU GETİRİR) ───
+        // ─── 1. ADMİN İÇİN: SİSTEMDEKİ HER GRUBU GETİRİR ───
         [HttpGet("list")]
         public async Task<IActionResult> GetGroups()
         {
             var groups = await _context.Groups
                 .Select(g => new
                 {
-                    id = g.Id,
-                    name = g.Name
+                    id = g.Id,     // KÜÇÜK HARF
+                    name = g.Name  // KÜÇÜK HARF
                 })
                 .ToListAsync();
 
             return Ok(groups);
         }
 
-        // ─── SOHBET (USER) EKRANI İÇİN (SADECE ÜYE OLUNAN GRUPLARI GETİRİR) ───
+        // ─── 2. USER (SOHBET) İÇİN: SADECE ÜYESİ OLDUĞU GRUBU GETİRİR ───
         [HttpGet("my-groups")]
         public async Task<IActionResult> GetMyGroups()
         {
@@ -68,8 +68,8 @@ namespace MassMessagingAPI.Controllers
                 .Where(ug => ug.UserId == userId)
                 .Select(ug => new
                 {
-                    id = ug.Group.Id,
-                    name = ug.Group.Name
+                    id = ug.Group.Id,    // KÜÇÜK HARF
+                    name = ug.Group.Name // KÜÇÜK HARF
                 })
                 .ToListAsync();
 

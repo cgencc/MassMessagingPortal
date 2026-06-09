@@ -371,10 +371,10 @@
             const list = document.getElementById("chatList");
             list.innerHTML = `<div class="text-center p-3"><div class="spinner-border spinner-border-sm text-primary"></div></div>`;
             try {
-                const [uRes, gRes] = await Promise.all([
-                    fetch(`${API_BASE}/User/list`,  { headers: { "Authorization": `Bearer ${token}` } }),
-                    fetch(`${API_BASE}/Group/list`, { headers: { "Authorization": `Bearer ${token}` } })
-                ]);
+        const [uRes, gRes] = await Promise.all([
+            fetch(`${API_BASE}/User/list`,  { headers: { "Authorization": `Bearer ${token}` } }),
+            fetch(`${API_BASE}/Group/my-groups`, { headers: { "Authorization": `Bearer ${token}` } })
+        ]);
                 const users  = uRes.ok  ? await uRes.json()  : [];
                 const groups = gRes.ok  ? await gRes.json()  : [];
 
