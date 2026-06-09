@@ -49,28 +49,22 @@ namespace MassMessagingAPI.Controllers
                 SentDate = DateTime.Now,
                 IsDeleted = false
             };
-
             await _messageRepository.AddAsync(message);
 
             if (model.GroupId.HasValue)
             {
                 var group = await _groupRepository.GetByIdAsync(model.GroupId.Value);
                 if (group != null)
-                {
-                    await _hubContext.Clients.Group(group.Name)
-                        .SendAsync("ReceiveGroupMessage", group.Name, senderName, model.Content);
-                }
+                    await _hubContext.Clients.Group(group.Name).SendAsync("ReceiveGroupMessage", group.Name, senderName, model.Content);
             }
             else if (!string.IsNullOrEmpty(model.ReceiverId))
             {
-                await _hubContext.Clients.User(model.ReceiverId)
-                    .SendAsync("ReceiveMessage", senderId, senderName, model.Content);
+                await _hubContext.Clients.User(model.ReceiverId).SendAsync("ReceiveMessage", senderId, senderName, model.Content);
             }
 
             return Ok(new { Message = "Mesaj gönderildi." });
         }
 
-        // GetHistory metodunu bu şekilde güncelle:
         [HttpGet("history/{id}/{page}")]
         public async Task<IActionResult> GetHistory(string id, int page = 1)
         {
@@ -78,17 +72,71 @@ namespace MassMessagingAPI.Controllers
             var myId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             bool isGroup = int.TryParse(id, out int groupId);
 
-            // !m.IsDeleted filtresi burada kritik!
             var query = _context.Messages.Where(m => !m.IsDeleted).Include(m => m.Sender).AsQueryable();
-
             if (isGroup) query = query.Where(m => m.GroupId == groupId);
             else query = query.Where(m => (m.SenderId == myId && m.ReceiverId == id) || (m.SenderId == id && m.ReceiverId == myId));
 
-            var messages = await query.OrderByDescending(m => m.SentDate).Skip((page - 1) * pageSize).Take(pageSize).OrderBy(m => m.SentDate)
-                .Select(m => new { m.Id, m.Content, m.SentDate, m.IsEdited, SenderName = m.Sender.FirstName + " " + m.Sender.LastName, IsMine = m.SenderId == myId })
+            var messages = await query
+                .OrderByDescending(m => m.SentDate)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .OrderBy(m => m.SentDate)
+                .Select(m => new
+                {
+                    m.Id,
+                    m.Content,
+                    m.SentDate,
+                    m.IsEdited,
+                    SenderName = m.Sender.FirstName + " " + m.Sender.LastName,
+                    IsMine = m.SenderId == myId
+                })
                 .ToListAsync();
 
             return Ok(messages);
+        }
+
+        // ✅ NEW: Search through messages the current user is part of
+        // GET /api/Message/search?q=hello&page=1
+        [HttpGet("search")]
+        public async Task<IActionResult> SearchMessages([FromQuery] string q, [FromQuery] int page = 1)
+        {
+            if (string.IsNullOrWhiteSpace(q))
+                return BadRequest(new { Message = "Arama terimi boş olamaz." });
+
+            int pageSize = 30;
+            var myId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+            // Search messages the user sent or received (DMs + group messages in their groups)
+            var myGroupIds = await _context.UserGroups
+                .Where(ug => ug.UserId == myId)
+                .Select(ug => ug.GroupId)
+                .ToListAsync();
+
+            var results = await _context.Messages
+                .Where(m => !m.IsDeleted &&
+                    m.Content.Contains(q) &&
+                    (m.SenderId == myId ||
+                     m.ReceiverId == myId ||
+                     (m.GroupId != null && myGroupIds.Contains(m.GroupId.Value))))
+                .Include(m => m.Sender)
+                .Include(m => m.Group)
+                .OrderByDescending(m => m.SentDate)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .Select(m => new
+                {
+                    m.Id,
+                    m.Content,
+                    m.SentDate,
+                    SenderName = m.Sender.FirstName + " " + m.Sender.LastName,
+                    IsMine = m.SenderId == myId,
+                    Context = m.GroupId != null ? m.Group!.Name : "Özel mesaj",
+                    TargetId = m.GroupId != null ? m.GroupId.ToString() : (m.SenderId == myId ? m.ReceiverId : m.SenderId),
+                    IsGroup = m.GroupId != null
+                })
+                .ToListAsync();
+
+            return Ok(results);
         }
 
         [HttpPut("edit")]
@@ -97,12 +145,10 @@ namespace MassMessagingAPI.Controllers
             var msg = await _messageRepository.GetByIdAsync(dto.Id);
             if (msg == null || msg.SenderId != User.FindFirst(ClaimTypes.NameIdentifier)?.Value)
                 return Unauthorized();
-
             msg.Content = dto.Content;
             msg.IsEdited = true;
-
             await _messageRepository.UpdateAsync(msg);
-            await _context.SaveChangesAsync(); // Değişikliği garanti kaydet
+            await _context.SaveChangesAsync();
             return Ok();
         }
 
@@ -112,15 +158,12 @@ namespace MassMessagingAPI.Controllers
             var msg = await _messageRepository.GetByIdAsync(id);
             if (msg == null || msg.SenderId != User.FindFirst(ClaimTypes.NameIdentifier)?.Value)
                 return Unauthorized();
-
-            msg.IsDeleted = true; // Soft Delete
-
+            msg.IsDeleted = true;
             await _messageRepository.UpdateAsync(msg);
-            await _context.SaveChangesAsync(); // Silme işlemini kesinleştir
+            await _context.SaveChangesAsync();
             return Ok();
         }
 
-        // Diğer metodlar...
         [HttpPut("mark-as-read/{messageId}")]
         public async Task<IActionResult> MarkAsRead(int messageId)
         {
@@ -132,6 +175,29 @@ namespace MassMessagingAPI.Controllers
             return Ok();
         }
 
+        // ✅ NEW: Get unread count for a specific conversation (DM or group)
+        // GET /api/Message/unread-count/{id}   (id = userId or groupId)
+        [HttpGet("unread-count/{id}")]
+        public async Task<IActionResult> GetUnreadCount(string id)
+        {
+            var myId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            bool isGroup = int.TryParse(id, out int groupId);
+
+            int count;
+            if (isGroup)
+            {
+                count = await _context.Messages
+                    .CountAsync(m => !m.IsDeleted && !m.IsRead && m.GroupId == groupId && m.SenderId != myId);
+            }
+            else
+            {
+                count = await _context.Messages
+                    .CountAsync(m => !m.IsDeleted && !m.IsRead && m.SenderId == id && m.ReceiverId == myId);
+            }
+
+            return Ok(new { UnreadCount = count });
+        }
+
         [HttpPost("upload-file")]
         public async Task<IActionResult> UploadFile(IFormFile file)
         {
@@ -140,8 +206,11 @@ namespace MassMessagingAPI.Controllers
             var ext = Path.GetExtension(file.FileName).ToLower();
             if (!allowedExtensions.Contains(ext)) return BadRequest("Desteklenmeyen dosya tipi.");
             var fileName = Guid.NewGuid().ToString() + ext;
-            var path = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot/uploads", fileName);
-            using (var stream = new FileStream(path, FileMode.Create)) await file.CopyToAsync(stream);
+            var uploadsPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads");
+            Directory.CreateDirectory(uploadsPath); // ensure folder exists
+            var path = Path.Combine(uploadsPath, fileName);
+            using (var stream = new FileStream(path, FileMode.Create))
+                await file.CopyToAsync(stream);
             return Ok(new { url = "/uploads/" + fileName });
         }
     }

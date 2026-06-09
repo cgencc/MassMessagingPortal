@@ -5,14 +5,58 @@
 <style>
     .chat-list-item {
         cursor: pointer;
-        padding: 15px;
+        padding: 12px 15px;
         border-bottom: 1px solid #eee;
         transition: 0.2s;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
     }
 
         .chat-list-item:hover, .active-chat {
             background-color: #e2e3e5 !important;
-            border-left: 5px solid #0d6efd;
+            border-left: 4px solid #0d6efd;
+        }
+
+        .chat-list-item .item-name {
+            flex: 1;
+            font-size: 0.88rem;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+    /* Online presence dot */
+    .presence-dot {
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        background: #aaa;
+        flex-shrink: 0;
+        transition: background 0.3s;
+    }
+
+        .presence-dot.online {
+            background: #28a745;
+        }
+
+    /* Unread badge */
+    .unread-badge {
+        background: #dc3545;
+        color: #fff;
+        font-size: 10px;
+        font-weight: 700;
+        border-radius: 10px;
+        padding: 1px 6px;
+        min-width: 18px;
+        text-align: center;
+        display: none;
+        flex-shrink: 0;
+    }
+
+        .unread-badge.visible {
+            display: inline-block;
         }
 
     #chatBox {
@@ -82,22 +126,86 @@
         margin: auto;
         font-size: 0.9rem;
     }
+
+    /* Search bar */
+    #searchPanel {
+        border-bottom: 1px solid #eee;
+        background: #fff;
+        padding: 8px;
+    }
+
+    #searchResults .search-result-item {
+        padding: 8px 12px;
+        border-bottom: 1px solid #eee;
+        cursor: pointer;
+        font-size: 0.85rem;
+    }
+
+        #searchResults .search-result-item:hover {
+            background: #f8f9fa;
+        }
+
+    #searchResults .result-context {
+        font-size: 10px;
+        color: #888;
+    }
+
+    #searchResults .result-match {
+        font-weight: 600;
+    }
+
+    /* Load more */
+    #loadMoreBtn {
+        display: none;
+    }
 </style>
 
-<div class="row g-0 mt-3" style="height: 85vh;">
+<div class="row g-0 mt-3" style="height: 88vh;">
+
+    <!-- LEFT: Chat list -->
     <div class="col-md-3 border-end bg-white d-flex flex-column">
-        <div class="p-3 border-bottom bg-light fw-bold"><i class="fa-solid fa-comments text-primary me-2"></i>Sohbetler</div>
+        <div class="p-3 border-bottom bg-light d-flex align-items-center justify-content-between">
+            <span class="fw-bold"><i class="fa-solid fa-comments text-primary me-2"></i>Sohbetler</span>
+        </div>
+
+        <!-- Search bar -->
+        <div id="searchPanel">
+            <div class="input-group input-group-sm">
+                <span class="input-group-text bg-white border-end-0"><i class="fa-solid fa-magnifying-glass text-muted"></i></span>
+                <input type="text" id="searchInput" class="form-control border-start-0 ps-0" placeholder="Mesajlarda ara..." oninput="onSearchInput(this.value)">
+                <button class="btn btn-outline-secondary btn-sm" id="clearSearch" onclick="clearSearch()" style="display:none;">✕</button>
+            </div>
+        </div>
+
+        <!-- Search results (shown while searching) -->
+        <div id="searchResults" style="overflow-y:auto; flex:1; display:none;"></div>
+
+        <!-- Normal chat list -->
         <div id="chatList" style="overflow-y:auto; flex:1;"></div>
     </div>
 
+    <!-- RIGHT: Chat area -->
     <div class="col-md-9 d-flex flex-column bg-white">
+
+        <!-- Admin announcement pin -->
         <div id="adminPin" class="alert alert-warning m-0 py-2 px-3" style="display:none; border-radius:0; font-size:0.85rem;"></div>
 
-        <div id="chatHeader" class="p-3 border-bottom bg-light fw-semibold text-muted" style="font-size:0.9rem;">
-            <div id="typingStatus" class="px-3 pb-2 bg-light text-success small fw-bold" style="display:none; font-style:italic;"></div>
-            Bir sohbet seçin
+        <!-- Chat header with typing indicator -->
+        <div id="chatHeader" class="p-3 border-bottom bg-light fw-semibold text-muted d-flex align-items-center justify-content-between" style="font-size:0.9rem;">
+            <div>
+                <span id="chatHeaderName">Bir sohbet seçin</span>
+                <div id="typingStatus" class="text-success small fw-bold" style="display:none; font-style:italic; font-size:0.78rem;"></div>
+            </div>
         </div>
 
+        <!-- Load more old messages -->
+        <div class="text-center py-1 bg-light border-bottom">
+            <button id="loadMoreBtn" class="btn btn-sm btn-outline-secondary px-4" onclick="loadHistory(activeId, true)">
+                <i class="fa-solid fa-clock-rotate-left me-1"></i>Daha eski mesajlar
+            </button>
+        </div>
+
+        <!-- Messages -->
         <div id="chatBox">
             <div id="chatEmptyState">
                 <i class="fa-solid fa-comments fa-2x mb-2 d-block"></i>
@@ -105,13 +213,11 @@
             </div>
         </div>
 
+        <!-- Input bar -->
         <div class="p-2 border-top bg-light d-flex align-items-center gap-2">
             <input type="file" id="mediaInput" accept="image/*,video/*,.pdf" style="display:none" onchange="handleFileSelect(event)">
             <button class="btn btn-outline-secondary btn-sm" onclick="document.getElementById('mediaInput').click()" title="Dosya ekle">
                 <i class="fa-solid fa-paperclip"></i>
-            </button>
-            <button class="btn btn-outline-secondary btn-sm" onclick="startCamera()" title="Kamera">
-                <i class="fa-solid fa-camera"></i>
             </button>
             <input type="text" id="messageInput" class="form-control rounded-pill" placeholder="Bir şeyler yazın..." onkeydown="if(event.key==='Enter') sendMessage()">
             <button onclick="sendMessage()" class="btn btn-primary rounded-pill px-4">
@@ -124,18 +230,20 @@
 @section Scripts {
     <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.0/signalr.min.js"></script>
     <script>
-        // --- Sabitler ---
         const API_BASE = "https://localhost:7124/api";
-        const HUB_URL = "https://localhost:7124/chatHub";
-        const token = localStorage.getItem("JWToken");
+        const HUB_URL  = "https://localhost:7124/chatHub";
+        const token    = localStorage.getItem("JWToken");
 
-        // --- Global Değişkenler ---
-        let activeId = null, isGroup = false, activeName = "", connection = null, typingTimer;
-        let currentPage = 1, isLoading = false, hasMore = true;
-
-        // --- Başlatma İşlemleri ---
         if (!token) window.location.href = "/Auth/Login";
 
+        // ── Global state ──────────────────────────────────────────────────────
+        let activeId = null, isGroup = false, activeName = "";
+        let connection = null, typingTimer;
+        let currentPage = 1, isLoading = false, hasMore = true;
+        let onlineUsers = new Set();     // ✅ tracks online presence
+        let searchTimer = null;
+
+        // ── Boot ──────────────────────────────────────────────────────────────
         document.addEventListener("DOMContentLoaded", async () => {
             if (Notification.permission !== "granted") Notification.requestPermission();
             if (token) await initApp();
@@ -144,35 +252,58 @@
         async function initApp() {
             connection = new signalR.HubConnectionBuilder()
                 .withUrl(HUB_URL, { accessTokenFactory: () => token })
-                .withAutomaticReconnect().build();
+                .withAutomaticReconnect()
+                .build();
 
-            // Hub Dinleyicileri
+            // Incoming DM
             connection.on("ReceiveMessage", (sId, sName, content) => {
-                if (document.hidden && activeId !== sId) new Notification("Yeni Mesaj!", { body: `${sName}: ${content}` });
-                if (!isGroup && activeId === sId) renderMessage(sName, content, false, null, null, true);
-                else showToast(`📩 ${sName}: ${content}`);
+                if (document.hidden) new Notification("Yeni Mesaj!", { body: `${sName}: ${content}` });
+                if (!isGroup && activeId === sId) {
+                    renderMessage(sName, content, false, null, null, true);
+                    markConversationRead(sId);
+                } else {
+                    incrementUnread(sId);
+                    showToast(`📩 ${sName}: ${content}`);
+                }
             });
 
+            // Incoming group message
             connection.on("ReceiveGroupMessage", (gName, sName, content) => {
-                if (document.hidden && activeName !== gName) new Notification(`Yeni Mesaj: ${gName}`, { body: `${sName}: ${content}` });
-                if (isGroup && activeName === gName) renderMessage(sName, content, false, null, null, true);
-                else showToast(`👥 [${gName}] ${sName}: ${content}`);
+                if (document.hidden) new Notification(`Yeni Mesaj: ${gName}`, { body: `${sName}: ${content}` });
+                if (isGroup && activeName === gName) {
+                    renderMessage(sName, content, false, null, null, true);
+                } else {
+                    // find group list item by name to badge it
+                    const el = document.querySelector(`[data-group-name="${gName}"]`);
+                    if (el) incrementUnreadOnElement(el);
+                    showToast(`👥 [${gName}] ${sName}: ${content}`);
+                }
             });
 
+            // Admin announcement
             connection.on("ReceiveAdminMessage", (content) => {
                 const pin = document.getElementById("adminPin");
-                pin.innerHTML = `<i class='fa-solid fa-bullhorn me-2'></i><strong>Yönetici Duyurusu:</strong> ${content}`;
+                pin.innerHTML = `<i class='fa-solid fa-bullhorn me-2'></i><strong>Yönetici Duyurusu:</strong> ${escapeHtml(content)}
+                    <button type="button" class="btn-close btn-sm float-end" onclick="this.parentElement.style.display='none'"></button>`;
                 pin.style.display = "block";
             });
 
+            // Typing indicator
             connection.on("ReceiveTyping", (id, name, isGroupMsg) => {
                 if (isGroupMsg === isGroup && id === activeId) {
-                    const statusEl = document.getElementById("typingStatus");
-                    statusEl.innerText = `${name} yazıyor...`;
-                    statusEl.style.display = "block";
+                    const el = document.getElementById("typingStatus");
+                    el.innerText = `${name} yazıyor...`;
+                    el.style.display = "block";
                     clearTimeout(typingTimer);
-                    typingTimer = setTimeout(() => { statusEl.style.display = "none"; }, 2000);
+                    typingTimer = setTimeout(() => { el.style.display = "none"; }, 2000);
                 }
+            });
+
+            // ✅ Online presence
+            connection.on("UserStatusChanged", (userId, isOnline) => {
+                if (isOnline) onlineUsers.add(userId);
+                else onlineUsers.delete(userId);
+                updatePresenceDot(userId, isOnline);
             });
 
             try {
@@ -181,84 +312,177 @@
             } catch (err) { console.error("SignalR hatası:", err); }
         }
 
-        // --- Yazıyor Durumu Tetikleyici ---
+        // ── Typing trigger ────────────────────────────────────────────────────
         document.getElementById("messageInput").addEventListener("input", () => {
-            if (activeId && connection && connection.state === signalR.HubConnectionState.Connected) {
+            if (activeId && connection?.state === signalR.HubConnectionState.Connected)
                 connection.invoke("SendTypingStatus", activeId, isGroup).catch(console.error);
-            }
         });
 
-        // --- Liste Yükleme ---
+        // ── Load chat list ────────────────────────────────────────────────────
         async function loadLists() {
             const list = document.getElementById("chatList");
             list.innerHTML = `<div class="text-center p-3"><div class="spinner-border spinner-border-sm text-primary"></div></div>`;
             try {
                 const [uRes, gRes] = await Promise.all([
-                    fetch(`${API_BASE}/User/list`, { headers: { "Authorization": `Bearer ${token}` } }),
+                    fetch(`${API_BASE}/User/list`,  { headers: { "Authorization": `Bearer ${token}` } }),
                     fetch(`${API_BASE}/Group/list`, { headers: { "Authorization": `Bearer ${token}` } })
                 ]);
-                const users = uRes.ok ? await uRes.json() : [];
-                const groups = gRes.ok ? await gRes.json() : [];
+                const users  = uRes.ok  ? await uRes.json()  : [];
+                const groups = gRes.ok  ? await gRes.json()  : [];
 
                 list.innerHTML = "";
+
                 if (users.length > 0) {
                     list.innerHTML += `<div class="px-3 pt-3 pb-1 text-uppercase text-muted" style="font-size:10px;font-weight:700;">Kullanıcılar</div>`;
-                    users.forEach(u => list.innerHTML += `<div class="chat-list-item" onclick="startChat('${u.id}', false, this, '${escapeHtml(u.fullName)}')">👤 ${escapeHtml(u.fullName)}</div>`);
+                    for (const u of users) {
+                        const isOnline = onlineUsers.has(u.id);
+                        list.innerHTML += `
+                        <div class="chat-list-item" id="chat-item-${u.id}" data-user-id="${u.id}"
+                             onclick="startChat('${u.id}', false, this, '${escapeHtml(u.fullName)}')">
+                            <span class="presence-dot ${isOnline ? 'online' : ''}" id="dot-${u.id}"></span>
+                            <span class="item-name">👤 ${escapeHtml(u.fullName)}</span>
+                            <span class="unread-badge" id="badge-${u.id}">0</span>
+                        </div>`;
+                    }
                 }
                 if (groups.length > 0) {
                     list.innerHTML += `<div class="px-3 pt-3 pb-1 text-uppercase text-muted" style="font-size:10px;font-weight:700;">Gruplar</div>`;
-                    groups.forEach(g => list.innerHTML += `<div class="chat-list-item" onclick="startChat('${g.id}', true, this, '${escapeHtml(g.name)}')">👥 ${escapeHtml(g.name)}</div>`);
+                    groups.forEach(g => {
+                        list.innerHTML += `
+                        <div class="chat-list-item" id="chat-item-${g.id}" data-group-id="${g.id}" data-group-name="${escapeHtml(g.name)}"
+                             onclick="startChat('${g.id}', true, this, '${escapeHtml(g.name)}')">
+                            <span class="item-name">👥 ${escapeHtml(g.name)}</span>
+                            <span class="unread-badge" id="badge-g-${g.id}">0</span>
+                        </div>`;
+                    });
                 }
+
+                // Load unread counts in background
+                loadAllUnreadCounts(users, groups);
+
             } catch(e) { list.innerHTML = `<div class="p-3 text-danger small">Listeler yüklenemedi.</div>`; }
         }
 
-        // --- Sohbet Başlat ---
+        // ── Unread counts ─────────────────────────────────────────────────────
+        async function loadAllUnreadCounts(users, groups) {
+            const fetches = [
+                ...users.map(u => fetchUnread(u.id, false)),
+                ...groups.map(g => fetchUnread(g.id, true))
+            ];
+            await Promise.allSettled(fetches);
+        }
+
+        async function fetchUnread(id, group) {
+            try {
+                const res = await fetch(`${API_BASE}/Message/unread-count/${id}`, { headers: { "Authorization": `Bearer ${token}` } });
+                if (!res.ok) return;
+                const { unreadCount } = await res.json();
+                if (unreadCount > 0) setBadge(id, group, unreadCount);
+            } catch {}
+        }
+
+        function setBadge(id, group, count) {
+            const badgeId = group ? `badge-g-${id}` : `badge-${id}`;
+            const el = document.getElementById(badgeId);
+            if (!el) return;
+            el.textContent = count > 99 ? "99+" : count;
+            el.classList.toggle("visible", count > 0);
+        }
+
+        function incrementUnread(userId) {
+            const el = document.getElementById(`badge-${userId}`);
+            if (!el) return;
+            const current = parseInt(el.textContent) || 0;
+            setBadge(userId, false, current + 1);
+        }
+
+        function incrementUnreadOnElement(listItem) {
+            const badge = listItem.querySelector(".unread-badge");
+            if (!badge) return;
+            const current = parseInt(badge.textContent) || 0;
+            badge.textContent = current + 1 > 99 ? "99+" : current + 1;
+            badge.classList.add("visible");
+        }
+
+        function markConversationRead(id) {
+            const el = document.getElementById(`badge-${id}`);
+            if (el) { el.textContent = "0"; el.classList.remove("visible"); }
+        }
+
+        // ── Presence dots ─────────────────────────────────────────────────────
+        function updatePresenceDot(userId, isOnline) {
+            const dot = document.getElementById(`dot-${userId}`);
+            if (dot) dot.classList.toggle("online", isOnline);
+        }
+
+        // ── Start chat ────────────────────────────────────────────────────────
         function startChat(id, group, element, name) {
-            activeId = id; isGroup = group; activeName = name; currentPage = 1; hasMore = true;
+            activeId = id; isGroup = group; activeName = name;
+            currentPage = 1; hasMore = true;
             document.querySelectorAll('.chat-list-item').forEach(el => el.classList.remove('active-chat'));
-            if(element) element.classList.add('active-chat');
-            document.getElementById("chatHeader").innerText = name;
+            if (element) element.classList.add('active-chat');
+            document.getElementById("chatHeaderName").innerText = name;
+            // Clear badge for opened conversation
+            if (!group) markConversationRead(id);
+            else { const b = document.getElementById(`badge-g-${id}`); if(b){b.textContent="0";b.classList.remove("visible");} }
             loadHistory(id);
         }
 
-        // --- Mesaj Geçmişi (Sonsuz Kaydırma) ---
+        // ── Message history ───────────────────────────────────────────────────
         async function loadHistory(id, isLoadMore = false) {
-            if (isLoading || (!hasMore && isLoadMore)) return;
+            if (!id || isLoading || (!hasMore && isLoadMore)) return;
             isLoading = true;
             const chatBox = document.getElementById("chatBox");
-            if (!isLoadMore) chatBox.innerHTML = '<div class="text-center p-3 text-muted">Yükleniyor...</div>';
+            const loadMoreBtn = document.getElementById("loadMoreBtn");
+
+            if (!isLoadMore) {
+                chatBox.innerHTML = '<div class="text-center p-3 text-muted">Yükleniyor...</div>';
+                loadMoreBtn.style.display = "none";
+            }
             try {
                 const res = await fetch(`${API_BASE}/Message/history/${id}/${currentPage}`, { headers: { "Authorization": `Bearer ${token}` } });
                 const msgs = await res.json();
-                if (msgs.length === 0) { hasMore = false; isLoading = false; if(!isLoadMore) chatBox.innerHTML = ""; return; }
+
+                if (msgs.length === 0) {
+                    hasMore = false;
+                    loadMoreBtn.style.display = "none";
+                    if (!isLoadMore) chatBox.innerHTML = "";
+                    isLoading = false;
+                    return;
+                }
+
                 if (!isLoadMore) chatBox.innerHTML = "";
+                const prevHeight = chatBox.scrollHeight;
                 msgs.forEach(m => renderMessage(m.senderName, m.content, m.isMine, m.sentDate, m.id, !isLoadMore));
                 currentPage++;
+
+                // After load-more, keep scroll position so messages don't jump
+                if (isLoadMore) chatBox.scrollTop = chatBox.scrollHeight - prevHeight;
+                else chatBox.scrollTop = chatBox.scrollHeight;
+
+                // Show "load more" only if a full page came back (more may exist)
+                loadMoreBtn.style.display = msgs.length === 20 ? "inline-block" : "none";
+
             } catch(e) { chatBox.innerHTML = '<div class="text-center p-3 text-danger">Hata!</div>'; }
             isLoading = false;
         }
 
-        document.getElementById("chatBox").addEventListener("scroll", function() {
-            if (this.scrollTop === 0 && !isLoading && hasMore) loadHistory(activeId, true);
-        });
-
-        // --- Mesaj Çizim & Aksiyonlar ---
+        // ── Render a message bubble ───────────────────────────────────────────
         function renderMessage(name, content, isMine, sentDate = null, messageId = null, toBottom = true) {
             const chatBox = document.getElementById("chatBox");
             document.getElementById("chatEmptyState")?.remove();
 
-            const timeStr = sentDate ? new Date(sentDate).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" }) : "";
-            const isMe = (isMine === true || isMine === "true");
-            const bubbleClass = isMe ? 'msg-me' : 'msg-other';
+            const timeStr  = sentDate ? new Date(sentDate).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" }) : "";
+            const isMe     = (isMine === true || isMine === "true");
+            const bubbleClass = isMe ? "msg-me" : "msg-other";
 
-            // Düzenle/Sil Butonları (Sadece kendi mesajlarımıza)
             const actions = isMe ? `
                 <div class="d-flex gap-2 justify-content-end msg-actions">
                     <button onclick="editMsg(${messageId}, '${escapeHtml(content)}')" class="text-dark"><i class="fa-solid fa-pen-to-square"></i></button>
                     <button onclick="deleteMsg(${messageId})" class="text-danger"><i class="fa-solid fa-trash"></i></button>
                 </div>` : "";
 
-            const msgHtml = `
+            const html = `
                 <div class="msg-bubble ${bubbleClass}">
                     ${!isMe ? `<span class="msg-sender">${escapeHtml(name)}</span>` : ""}
                     <div id="msg-content-${messageId}">${content}</div>
@@ -266,35 +490,27 @@
                     <span class="msg-time">${timeStr}</span>
                 </div>`;
 
-            if (toBottom) { chatBox.innerHTML += msgHtml; chatBox.scrollTop = chatBox.scrollHeight; }
-            else { chatBox.insertAdjacentHTML('afterbegin', msgHtml); }
+            if (toBottom) { chatBox.innerHTML += html; chatBox.scrollTop = chatBox.scrollHeight; }
+            else { chatBox.insertAdjacentHTML("afterbegin", html); }
         }
 
-        // --- Mesaj İşlemleri ---
+        // ── Send / Edit / Delete ──────────────────────────────────────────────
         async function sendMessage(contentOverride = null) {
             const input = document.getElementById("messageInput");
-            const text = contentOverride || input.value.trim();
-            if(!text || !activeId) return;
-
+            const text  = contentOverride || input.value.trim();
+            if (!text || !activeId) return;
             const res = await fetch(`${API_BASE}/Message/send`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
-                body: JSON.stringify({ content: text, [isGroup ? 'groupId' : 'receiverId']: isGroup ? parseInt(activeId) : activeId })
+                body: JSON.stringify({ content: text, [isGroup ? "groupId" : "receiverId"]: isGroup ? parseInt(activeId) : activeId })
             });
-            if(res.ok) {
-                renderMessage("Ben", text, true, null, null, true);
-                if(!contentOverride) input.value = "";
-            }
+            if (res.ok) { renderMessage("Ben", text, true, new Date().toISOString(), null, true); if (!contentOverride) input.value = ""; }
         }
 
         async function deleteMsg(id) {
             if (!confirm("Silmek istediğine emin misin?")) return;
             const res = await fetch(`${API_BASE}/Message/delete/${id}`, { method: "DELETE", headers: { "Authorization": `Bearer ${token}` } });
-            if (res.ok) {
-                const el = document.getElementById(`msg-content-${id}`)?.closest('.msg-bubble');
-                if(el) el.remove();
-                showToast("Mesaj silindi.");
-            }
+            if (res.ok) { document.getElementById(`msg-content-${id}`)?.closest(".msg-bubble")?.remove(); showToast("Mesaj silindi."); }
         }
 
         async function editMsg(id, oldContent) {
@@ -303,30 +519,83 @@
             const res = await fetch(`${API_BASE}/Message/edit`, {
                 method: "PUT",
                 headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
-                body: JSON.stringify({ id: id, content: newContent })
+                body: JSON.stringify({ id, content: newContent })
             });
-            if (res.ok) {
-                document.getElementById(`msg-content-${id}`).innerText = newContent;
-                showToast("Mesaj güncellendi.");
-            }
+            if (res.ok) { document.getElementById(`msg-content-${id}`).innerText = newContent; showToast("Mesaj güncellendi."); }
         }
 
+        // ── File upload ───────────────────────────────────────────────────────
         async function handleFileSelect(e) {
             const file = e.target.files[0];
-            const formData = new FormData(); formData.append("file", file);
-            const res = await fetch(`${API_BASE}/Message/upload-file`, { method: "POST", headers: { "Authorization": `Bearer ${token}` }, body: formData });
+            if (!file) return;
+            const formData = new FormData();
+            formData.append("file", file);
+            const res  = await fetch(`${API_BASE}/Message/upload-file`, { method: "POST", headers: { "Authorization": `Bearer ${token}` }, body: formData });
             const data = await res.json();
             sendMessage(`<img src="https://localhost:7124${data.url}" style="max-width:200px; border-radius:8px;">`);
         }
 
-        function startCamera() { alert("Kamera özelliği geliştiriliyor!"); }
-        function escapeHtml(str) { return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }
+        // ── Search ────────────────────────────────────────────────────────────
+        function onSearchInput(val) {
+            clearTimeout(searchTimer);
+            const clearBtn = document.getElementById("clearSearch");
+            clearBtn.style.display = val ? "inline-block" : "none";
+
+            if (!val.trim()) {
+                showSearchPanel(false);
+                return;
+            }
+            searchTimer = setTimeout(() => doSearch(val.trim()), 400); // 400ms debounce
+        }
+
+        async function doSearch(q) {
+            showSearchPanel(true);
+            const panel = document.getElementById("searchResults");
+            panel.innerHTML = `<div class="text-center p-3"><div class="spinner-border spinner-border-sm text-primary"></div></div>`;
+            try {
+                const res = await fetch(`${API_BASE}/Message/search?q=${encodeURIComponent(q)}`, { headers: { "Authorization": `Bearer ${token}` } });
+                const results = await res.json();
+
+                if (!results.length) { panel.innerHTML = `<div class="p-3 text-muted small text-center">Sonuç bulunamadı.</div>`; return; }
+
+                panel.innerHTML = results.map(r => `
+                    <div class="search-result-item" onclick="openSearchResult('${r.targetId}', ${r.isGroup})">
+                        <div class="result-context">${escapeHtml(r.context)} · ${new Date(r.sentDate).toLocaleDateString("tr-TR")}</div>
+                        <div class="result-match">${escapeHtml(r.senderName)}: ${escapeHtml(r.content.substring(0, 80))}${r.content.length > 80 ? "..." : ""}</div>
+                    </div>`).join("");
+            } catch { panel.innerHTML = `<div class="p-3 text-danger small">Arama başarısız.</div>`; }
+        }
+
+        function openSearchResult(targetId, isGroupResult) {
+            clearSearch();
+            // Find the list item and click it
+            const selector = isGroupResult ? `[data-group-id="${targetId}"]` : `[data-user-id="${targetId}"]`;
+            const item = document.querySelector(selector);
+            if (item) item.click();
+        }
+
+        function clearSearch() {
+            document.getElementById("searchInput").value = "";
+            document.getElementById("clearSearch").style.display = "none";
+            showSearchPanel(false);
+        }
+
+        function showSearchPanel(show) {
+            document.getElementById("searchResults").style.display = show ? "block" : "none";
+            document.getElementById("chatList").style.display    = show ? "none"  : "block";
+        }
+
+        // ── Helpers ───────────────────────────────────────────────────────────
+        function escapeHtml(str) {
+            return String(str).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+        }
+
         function showToast(msg) {
-            const toast = document.createElement("div");
-            toast.style.cssText = "position:fixed; bottom:20px; right:20px; background:#333; color:#fff; padding:10px 16px; border-radius:8px;";
-            toast.textContent = msg;
-            document.body.appendChild(toast);
-            setTimeout(() => toast.remove(), 3000);
+            const t = document.createElement("div");
+            t.style.cssText = "position:fixed;bottom:20px;right:20px;background:#333;color:#fff;padding:10px 16px;border-radius:8px;z-index:9999;";
+            t.textContent = msg;
+            document.body.appendChild(t);
+            setTimeout(() => t.remove(), 3000);
         }
     </script>
 }

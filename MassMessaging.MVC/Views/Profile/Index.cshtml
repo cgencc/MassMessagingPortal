@@ -7,28 +7,49 @@
         <div class="col-md-6">
             <div class="card shadow-sm border-0">
                 <div class="card-body p-4 text-center">
-                    <div class="mb-4">
+                    <div class="mb-3">
                         <i class="fa-solid fa-circle-user fa-5x text-primary"></i>
                     </div>
 
                     <h4 class="fw-bold" id="userName">Yükleniyor...</h4>
                     <p class="text-muted" id="userEmail"></p>
 
+                    <!-- Success / error feedback -->
+                    <div id="profileMsg" class="alert" style="display:none; font-size:0.9em;"></div>
+
                     <hr class="my-4">
 
-                    <div class="text-start mt-4">
-                        <div class="mb-3">
-                            <label class="small text-muted fw-bold text-uppercase">Ad Soyad</label>
-                            <input type="text" id="fullNameDisplay" class="form-control" readonly>
+                    <div class="text-start">
+                        <div class="row g-3 mb-3">
+                            <div class="col-md-6">
+                                <label class="small text-muted fw-bold text-uppercase">Ad</label>
+                                <input type="text" id="firstName" class="form-control" placeholder="Ad" readonly>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="small text-muted fw-bold text-uppercase">Soyad</label>
+                                <input type="text" id="lastName" class="form-control" placeholder="Soyad" readonly>
+                            </div>
                         </div>
                         <div class="mb-3">
                             <label class="small text-muted fw-bold text-uppercase">E-posta</label>
-                            <input type="text" id="emailDisplay" class="form-control" readonly>
+                            <input type="email" id="emailField" class="form-control" placeholder="E-posta" readonly>
                         </div>
                     </div>
 
                     <div class="d-grid gap-2 mt-4">
-                        <a href="/Chat/Index" class="btn btn-primary">Sohbetlere Dön</a>
+                        <!-- Toggle between view/edit modes -->
+                        <button id="editBtn" onclick="enterEditMode()" class="btn btn-outline-primary">
+                            <i class="fa-solid fa-pen me-1"></i>Profili Düzenle
+                        </button>
+                        <button id="saveBtn" onclick="saveProfile()" class="btn btn-success" style="display:none;">
+                            <i class="fa-solid fa-floppy-disk me-1"></i>Kaydet
+                        </button>
+                        <button id="cancelBtn" onclick="cancelEdit()" class="btn btn-outline-secondary" style="display:none;">
+                            İptal
+                        </button>
+                        <a href="/Chat/Index" class="btn btn-primary">
+                            <i class="fa-solid fa-comments me-1"></i>Sohbetlere Dön
+                        </a>
                     </div>
                 </div>
             </div>
@@ -39,38 +60,94 @@
 @section Scripts {
     <script>
         const API_BASE = "https://localhost:7124/api";
-        const token = localStorage.getItem("JWToken");
+        const token    = localStorage.getItem("JWToken");
+
+        // Snapshot of original values so we can cancel
+        let originalValues = {};
 
         document.addEventListener("DOMContentLoaded", async () => {
-            if (!token) {
-                window.location.href = "/Auth/Login";
-                return;
-            }
+            if (!token) { window.location.href = "/Auth/Login"; return; }
             await loadProfile();
         });
 
-        // Profil verilerini çek ve ekrana bas
         async function loadProfile() {
             try {
-                const response = await fetch(`${API_BASE}/User/profile`, {
+                const res = await fetch(`${API_BASE}/User/profile`, {
                     headers: { "Authorization": `Bearer ${token}` }
                 });
+                if (!res.ok) { showMsg("Profil yüklenemedi.", "danger"); return; }
 
-                if (response.ok) {
-                    const user = await response.json();
+                const user = await res.json();
+                document.getElementById("userName").innerText  = `${user.firstName} ${user.lastName}`;
+                document.getElementById("userEmail").innerText = user.email;
+                document.getElementById("firstName").value     = user.firstName;
+                document.getElementById("lastName").value      = user.lastName;
+                document.getElementById("emailField").value    = user.email;
 
-                    // Verileri yerleştir
-                    document.getElementById("userName").innerText = `${user.firstName} ${user.lastName}`;
-                    document.getElementById("userEmail").innerText = user.email;
-                    document.getElementById("fullNameDisplay").value = `${user.firstName} ${user.lastName}`;
-                    document.getElementById("emailDisplay").value = user.email;
-                } else {
-                    console.error("Profil verisi çekilemedi.");
-                }
-            } catch (e) {
-                console.error("Hata:", e);
+                // Store snapshot for cancel
+                originalValues = { firstName: user.firstName, lastName: user.lastName, email: user.email };
+            } catch {
                 document.getElementById("userName").innerText = "Hata oluştu!";
             }
+        }
+
+        function enterEditMode() {
+            ["firstName","lastName","emailField"].forEach(id => document.getElementById(id).removeAttribute("readonly"));
+            document.getElementById("editBtn").style.display   = "none";
+            document.getElementById("saveBtn").style.display   = "inline-block";
+            document.getElementById("cancelBtn").style.display = "inline-block";
+        }
+
+        function cancelEdit() {
+            document.getElementById("firstName").value  = originalValues.firstName;
+            document.getElementById("lastName").value   = originalValues.lastName;
+            document.getElementById("emailField").value = originalValues.email;
+            exitEditMode();
+        }
+
+        function exitEditMode() {
+            ["firstName","lastName","emailField"].forEach(id => document.getElementById(id).setAttribute("readonly",""));
+            document.getElementById("editBtn").style.display   = "inline-block";
+            document.getElementById("saveBtn").style.display   = "none";
+            document.getElementById("cancelBtn").style.display = "none";
+        }
+
+        async function saveProfile() {
+            const firstName = document.getElementById("firstName").value.trim();
+            const lastName  = document.getElementById("lastName").value.trim();
+            const email     = document.getElementById("emailField").value.trim();
+
+            if (!firstName || !lastName || !email) {
+                showMsg("Tüm alanlar doldurulmalıdır.", "danger"); return;
+            }
+
+            try {
+                const res = await fetch(`${API_BASE}/User/update-profile`, {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+                    body: JSON.stringify({ firstName, lastName, email })
+                });
+
+                if (res.ok) {
+                    originalValues = { firstName, lastName, email };
+                    document.getElementById("userName").innerText  = `${firstName} ${lastName}`;
+                    document.getElementById("userEmail").innerText = email;
+                    exitEditMode();
+                    showMsg("Profil başarıyla güncellendi.", "success");
+                } else {
+                    showMsg("Güncelleme başarısız. Lütfen tekrar deneyin.", "danger");
+                }
+            } catch {
+                showMsg("Sunucuya bağlanılamadı.", "danger");
+            }
+        }
+
+        function showMsg(text, type) {
+            const el = document.getElementById("profileMsg");
+            el.className = `alert alert-${type}`;
+            el.innerText = text;
+            el.style.display = "block";
+            setTimeout(() => el.style.display = "none", 4000);
         }
     </script>
 }
