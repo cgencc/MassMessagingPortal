@@ -2,54 +2,10 @@
     ViewData["Title"] = "Yönetim Paneli";
 }
 
-<style>
-    .chat-list-item {
-        cursor: pointer;
-        padding: 15px;
-        border-bottom: 1px solid #eee;
-        transition: 0.2s;
-    }
-
-        .chat-list-item:hover, .active-chat {
-            background-color: #e2e3e5 !important;
-            border-left: 5px solid #0d6efd;
-        }
-
-    #chatBox {
-        display: flex;
-        flex-direction: column;
-        overflow-y: auto;
-        background: #e5ddd5;
-        gap: 8px;
-        flex-grow: 1;
-        padding: 12px;
-    }
-
-    .msg-bubble {
-        max-width: 70%;
-        padding: 8px 12px;
-        border-radius: 12px;
-        word-break: break-word;
-        font-size: 0.92rem;
-    }
-
-    .msg-me {
-        background-color: #d1e7dd;
-        align-self: flex-end;
-        border-bottom-right-radius: 2px;
-    }
-
-    .msg-other {
-        background-color: #ffffff;
-        align-self: flex-start;
-        border-bottom-left-radius: 2px;
-        border: 1px solid #ddd;
-    }
-</style>
-
 <div class="container-fluid mt-4">
     <div class="row">
         <div class="col-lg-10 offset-lg-1">
+
             <div class="card border-0 shadow-sm mb-4">
                 <div class="card-body p-4 d-flex justify-content-between align-items-center">
                     <div>
@@ -62,22 +18,32 @@
                 </div>
             </div>
 
-            <div class="card modern-card shadow-sm border-0">
+            <div class="card shadow-sm border-0">
                 <div class="card-header bg-white border-bottom-0 pt-4">
-                    <ul class="nav nav-pills" id="adminTabs" role="tablist">
-                        <li class="nav-item"><button class="nav-link active rounded-pill px-4" data-bs-toggle="tab" data-bs-target="#users" type="button"><i class="fa-solid fa-users me-2"></i>Kullanıcılar</button></li>
-                        <li class="nav-item"><button class="nav-link rounded-pill px-4 ms-2" data-bs-toggle="tab" data-bs-target="#groups" type="button"><i class="fa-solid fa-layer-group me-2"></i>Grup Yönetimi</button></li>
+                    <ul class="nav nav-pills" role="tablist">
+                        <li class="nav-item">
+                            <button class="nav-link active rounded-pill px-4" data-bs-toggle="tab" data-bs-target="#users" type="button">
+                                <i class="fa-solid fa-users me-2"></i>Kullanıcılar
+                            </button>
+                        </li>
+                        <li class="nav-item">
+                            <button class="nav-link rounded-pill px-4 ms-2" data-bs-toggle="tab" data-bs-target="#groups" type="button">
+                                <i class="fa-solid fa-layer-group me-2"></i>Grup Yönetimi
+                            </button>
+                        </li>
                     </ul>
                 </div>
 
                 <div class="card-body p-4">
-                    <div class="tab-content" id="adminTabsContent">
+                    <div class="tab-content">
+
+                        <!-- USERS TAB -->
                         <div class="tab-pane fade show active" id="users" role="tabpanel">
                             <div class="d-flex justify-content-between align-items-center mb-3 bg-light p-3 rounded">
                                 <h6 class="fw-bold mb-0">Kullanıcı Listesi</h6>
                                 <div class="input-group w-auto">
                                     <select id="bulkGroupSelect" class="form-select form-select-sm"></select>
-                                    <button class="btn btn-sm btn-success" onclick="bulkAddUsers()">Seçilenleri Ekle</button>
+                                    <button class="btn btn-sm btn-success" onclick="bulkAddUsers()">Seçilenleri Gruba Ekle</button>
                                 </div>
                             </div>
                             <div class="table-responsive">
@@ -86,18 +52,23 @@
                                         <tr>
                                             <th><input type="checkbox" id="selectAll" onclick="toggleSelectAll()"></th>
                                             <th>Ad Soyad</th>
-                                            <th>E-posta Adresi</th>
+                                            <th>E-posta</th>
                                             <th class="text-center">Roller</th>
                                             <th class="text-center">İşlemler</th>
                                         </tr>
                                     </thead>
                                     <tbody id="usersTableBody">
-                                        <tr><td colspan="5" class="text-center p-4"><div class="spinner-grow text-primary"></div></td></tr>
+                                        <tr>
+                                            <td colspan="5" class="text-center p-4">
+                                                <div class="spinner-grow text-primary"></div>
+                                            </td>
+                                        </tr>
                                     </tbody>
                                 </table>
                             </div>
                         </div>
 
+                        <!-- GROUPS TAB -->
                         <div class="tab-pane fade" id="groups" role="tabpanel">
                             <div class="row">
                                 <div class="col-md-5">
@@ -115,6 +86,7 @@
                                 </div>
                             </div>
                         </div>
+
                     </div>
                 </div>
             </div>
@@ -125,75 +97,175 @@
 @section Scripts {
     <script>
         const API_BASE = "https://localhost:7124/api";
+
+        // ─── Auth Guard (JS-only, no server session) ──────────────────────────
+        // The MVC controller just serves this view. We check the token and role
+        // right here in JS — if the user is not an Admin, redirect to login.
         const token = localStorage.getItem("JWToken");
 
-        document.addEventListener("DOMContentLoaded", () => {
-            if(!token) { window.location.href = "/Auth/Login"; return; }
-            loadUsers();
-            loadGroups();
-        });
+        (function guardAdminPage() {
+            if (!token) {
+                window.location.href = "/Auth/Login";
+                return;
+            }
+            try {
+                const payload = JSON.parse(atob(token.split('.')[1]));
+                // Check token expiry
+                if (payload.exp && Date.now() / 1000 > payload.exp) {
+                    localStorage.removeItem("JWToken");
+                    window.location.href = "/Auth/Login";
+                    return;
+                }
+                // Check Admin role
+                const role = payload["http://schemas.microsoft.com/ws/2008/06/identity/claims/role"] || payload["role"];
+                const isAdmin = role === "Admin" || (Array.isArray(role) && role.includes("Admin"));
+                if (!isAdmin) {
+                    alert("Bu sayfaya erişim yetkiniz yok.");
+                    window.location.href = "/Chat/Index";
+                }
+            } catch {
+                localStorage.removeItem("JWToken");
+                window.location.href = "/Auth/Login";
+            }
+        })();
 
+        // ─── Helpers ──────────────────────────────────────────────────────────
+        const authHeader = () => ({ "Authorization": `Bearer ${token}` });
+        const jsonHeader = () => ({ "Content-Type": "application/json", "Authorization": `Bearer ${token}` });
+
+        // ─── Select All ───────────────────────────────────────────────────────
         function toggleSelectAll() {
-            const isChecked = document.getElementById("selectAll").checked;
-            document.querySelectorAll(".user-checkbox").forEach(cb => cb.checked = isChecked);
+            const checked = document.getElementById("selectAll").checked;
+            document.querySelectorAll(".user-checkbox").forEach(cb => cb.checked = checked);
         }
 
+        // ─── Bulk Add to Group ────────────────────────────────────────────────
         async function bulkAddUsers() {
             const groupId = document.getElementById("bulkGroupSelect").value;
             const selected = Array.from(document.querySelectorAll(".user-checkbox:checked")).map(cb => cb.value);
-
-            if(!groupId) return alert("Lütfen bir grup seçin!");
-            if(selected.length === 0) return alert("Lütfen en az bir kullanıcı seçin!");
+            if (!groupId) return alert("Lütfen bir grup seçin!");
+            if (selected.length === 0) return alert("Lütfen en az bir kullanıcı seçin!");
 
             const res = await fetch(`${API_BASE}/Group/add-users-bulk`, {
                 method: "POST",
-                headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+                headers: jsonHeader(),
                 body: JSON.stringify({ groupId: parseInt(groupId), userIds: selected })
             });
-
-            if(res.ok) { alert("Kullanıcılar başarıyla eklendi."); }
-            else { alert("Hata oluştu."); }
+            alert(res.ok ? "Kullanıcılar başarıyla gruba eklendi." : "Hata oluştu.");
         }
 
+        // ─── Load Users ───────────────────────────────────────────────────────
         async function loadUsers() {
-            const res = await fetch(`${API_BASE}/Admin/users`, { headers: { "Authorization": `Bearer ${token}` }});
-            if (res.ok) {
-                const users = await res.json();
-                document.getElementById("usersTableBody").innerHTML = users.map(u => `
-                    <tr>
-                        <td><input type="checkbox" class="user-checkbox" value="${u.id}"></td>
-                        <td><div class="fw-bold">${u.firstName} ${u.lastName}</div></td>
-                        <td class="text-muted">${u.email}</td>
-                        <td class="text-center">${u.roles.map(r => `<span class="badge bg-primary rounded-pill mx-1">${r}</span>`).join('')}</td>
-                        <td class="text-center">
-                            <button class="btn btn-sm btn-outline-warning" onclick="grantAdmin('${u.id}')"><i class="fa-solid fa-shield"></i></button>
-                            <button class="btn btn-sm btn-outline-danger" onclick="deleteUser('${u.id}')"><i class="fa-solid fa-trash"></i></button>
-                        </td>
-                    </tr>`).join('');
+            const res = await fetch(`${API_BASE}/Admin/users`, { headers: authHeader() });
+
+            if (res.status === 401 || res.status === 403) {
+                alert("Oturumunuz sona erdi veya yetkiniz yok.");
+                window.location.href = "/Auth/Login";
+                return;
+            }
+
+            const users = await res.json();
+            document.getElementById("usersTableBody").innerHTML = users.map(u => {
+                const isAdmin = u.roles.includes("Admin");
+                return `
+                <tr>
+                    <td><input type="checkbox" class="user-checkbox" value="${u.id}"></td>
+                    <td><div class="fw-bold">${u.firstName} ${u.lastName}</div></td>
+                    <td class="text-muted small">${u.email}</td>
+                    <td class="text-center">
+                        ${u.roles.map(r => `<span class="badge bg-primary rounded-pill mx-1">${r}</span>`).join('') || '<span class="text-muted small">-</span>'}
+                    </td>
+                    <td class="text-center d-flex gap-1 justify-content-center">
+                        ${!isAdmin
+                            ? `<button class="btn btn-sm btn-outline-warning" onclick="grantAdmin('${u.id}')" title="Admin Yap">
+                                   <i class="fa-solid fa-shield"></i> Admin Yap
+                               </button>`
+                            : `<button class="btn btn-sm btn-outline-secondary" onclick="removeAdmin('${u.id}')" title="Admin Yetkisini Al">
+                                   <i class="fa-solid fa-shield-xmark"></i> Yetkiyi Al
+                               </button>`
+                        }
+                        <button class="btn btn-sm btn-outline-danger" onclick="deleteUser('${u.id}')" title="Kullanıcıyı Sil">
+                            <i class="fa-solid fa-trash"></i>
+                        </button>
+                    </td>
+                </tr>`;
+            }).join('');
+        }
+
+        // ─── Grant Admin ──────────────────────────────────────────────────────
+        async function grantAdmin(id) {
+            if (!confirm("Bu kullanıcıyı Admin yapmak istediğinize emin misiniz?")) return;
+            const res = await fetch(`${API_BASE}/Admin/assign-role/${id}/Admin`, {
+                method: "POST", headers: authHeader()
+            });
+            if (res.ok) { loadUsers(); }
+            else { alert("Rol atama başarısız."); }
+        }
+
+        // ─── Remove Admin ─────────────────────────────────────────────────────
+        // ✅ NEW: Calls POST /api/Admin/remove-role/{userId}/Admin
+        async function removeAdmin(id) {
+            if (!confirm("Bu kullanıcının Admin yetkisini kaldırmak istediğinize emin misiniz?")) return;
+            const res = await fetch(`${API_BASE}/Admin/remove-role/${id}/Admin`, {
+                method: "POST", headers: authHeader()
+            });
+            if (res.ok) { loadUsers(); }
+            else {
+                const err = await res.json().catch(() => ({}));
+                alert(err.message || "Yetki kaldırma başarısız.");
             }
         }
 
+        // ─── Delete User ──────────────────────────────────────────────────────
+        async function deleteUser(id) {
+            if (!confirm("Bu kullanıcıyı kalıcı olarak silmek istediğinize emin misiniz?")) return;
+            const res = await fetch(`${API_BASE}/Admin/delete-user/${id}`, {
+                method: "DELETE", headers: authHeader()
+            });
+            if (res.ok) { loadUsers(); }
+            else { alert("Silme işlemi başarısız."); }
+        }
+
+        // ─── Load Groups ──────────────────────────────────────────────────────
         async function loadGroups() {
-            const res = await fetch(`${API_BASE}/Group/list`, { headers: { "Authorization": `Bearer ${token}` }});
-            if (res.ok) {
-                const groups = await res.json();
-                document.getElementById("groupListUI").innerHTML = groups.map(g => `<li class="list-group-item d-flex justify-content-between">${g.name} <span class="badge bg-dark">ID: ${g.id}</span></li>`).join('');
-                document.getElementById("bulkGroupSelect").innerHTML = '<option value="">Grup Seçin...</option>' + groups.map(g => `<option value="${g.id}">${g.name}</option>`).join('');
-            }
+            const res = await fetch(`${API_BASE}/Group/list`, { headers: authHeader() });
+            if (!res.ok) return;
+            const groups = await res.json();
+
+            document.getElementById("groupListUI").innerHTML = groups.length
+                ? groups.map(g => `
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        ${g.name}
+                        <span class="badge bg-dark">ID: ${g.id}</span>
+                    </li>`).join('')
+                : '<li class="list-group-item text-muted">Henüz grup yok.</li>';
+
+            document.getElementById("bulkGroupSelect").innerHTML =
+                '<option value="">Grup Seçin...</option>' +
+                groups.map(g => `<option value="${g.id}">${g.name}</option>`).join('');
         }
 
+        // ─── Create Group ─────────────────────────────────────────────────────
         async function createGroup() {
-            const name = document.getElementById("newGroupName").value;
-            if(!name) return alert("İsim girin");
+            const name = document.getElementById("newGroupName").value.trim();
+            if (!name) return alert("Lütfen bir grup adı girin.");
             const res = await fetch(`${API_BASE}/Group/create`, {
                 method: "POST",
-                headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+                headers: jsonHeader(),
                 body: JSON.stringify({ name })
             });
-            if(res.ok) { alert("Grup oluşturuldu"); loadGroups(); }
+            if (res.ok) {
+                document.getElementById("newGroupName").value = "";
+                loadGroups();
+            } else {
+                alert("Grup oluşturulamadı.");
+            }
         }
 
-        async function grantAdmin(id) { await fetch(`${API_BASE}/Admin/assign-role/${id}/Admin`, { method: "POST", headers: { "Authorization": `Bearer ${token}` }}); loadUsers(); }
-        async function deleteUser(id) { await fetch(`${API_BASE}/Admin/delete-user/${id}`, { method: "DELETE", headers: { "Authorization": `Bearer ${token}` }}); loadUsers(); }
+        // ─── Init ─────────────────────────────────────────────────────────────
+        document.addEventListener("DOMContentLoaded", () => {
+            loadUsers();
+            loadGroups();
+        });
     </script>
 }

@@ -1,5 +1,9 @@
-using MassMessagingAPI.Data;
+﻿using MassMessagingAPI.Data;
+using MassMessagingAPI.Hubs;
+using MassMessagingAPI.Middlewares;
 using MassMessagingAPI.Models;
+using MassMessagingAPI.Repositories;
+using MassMessagingAPI.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -9,23 +13,27 @@ using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// 1. Veritaban� Ba�lant�s�
+// ─── Database ─────────────────────────────────────────────────────────────────
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-// 2. Identity Ayarlar�
+// ─── Identity ─────────────────────────────────────────────────────────────────
 builder.Services.AddIdentity<AppUser, IdentityRole>(options =>
 {
-    options.Password.RequireDigit = false;
+    options.Password.RequireDigit = true;
+    options.Password.RequireLowercase = true;
+    options.Password.RequireUppercase = true;
     options.Password.RequiredLength = 6;
-    options.Password.RequireNonAlphanumeric = false;
-    options.Password.RequireUppercase = false;
-    options.Password.RequireLowercase = false;
+    options.Password.RequireNonAlphanumeric = true;
 })
 .AddEntityFrameworkStores<AppDbContext>()
 .AddDefaultTokenProviders();
 
-// 3. JWT ve SignalR Auth Ayarlar�
+// ─── JWT Authentication ───────────────────────────────────────────────────────
+var jwtKey = builder.Configuration["Jwt:Key"]!;
+var jwtIssuer = builder.Configuration["Jwt:Issuer"]!;
+var jwtAudience = builder.Configuration["Jwt:Audience"]!;
+
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -33,18 +41,18 @@ builder.Services.AddAuthentication(options =>
 })
 .AddJwtBearer(options =>
 {
-    options.SaveToken = true;
-    options.RequireHttpsMetadata = false;
-    options.TokenValidationParameters = new TokenValidationParameters()
+    options.TokenValidationParameters = new TokenValidationParameters
     {
         ValidateIssuer = true,
         ValidateAudience = true,
-        ValidAudience = builder.Configuration["Jwt:Audience"],
-        ValidIssuer = builder.Configuration["Jwt:Issuer"],
-        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]!))
+        ValidateLifetime = true,
+        ValidateIssuerSigningKey = true,
+        ValidIssuer = jwtIssuer,
+        ValidAudience = jwtAudience,
+        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey))
     };
 
-    // --- SignalR i�in kritik ekleme ---
+    // ✅ Required: SignalR passes the JWT via ?access_token= query string
     options.Events = new JwtBearerEvents
     {
         OnMessageReceived = context =>
@@ -60,36 +68,65 @@ builder.Services.AddAuthentication(options =>
     };
 });
 
-// 4. Servisler
+// ─── Repositories & Services ──────────────────────────────────────────────────
+builder.Services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepository<>));
+builder.Services.AddScoped<ITokenService, TokenService>();
+
+// ─── SignalR ──────────────────────────────────────────────────────────────────
 builder.Services.AddSignalR();
-builder.Services.AddScoped(typeof(MassMessagingAPI.Repositories.IGenericRepository<>), typeof(MassMessagingAPI.Repositories.GenericRepository<>));
-builder.Services.AddScoped<MassMessagingAPI.Services.ITokenService, MassMessagingAPI.Services.TokenService>();
+
+// ─── CORS ─────────────────────────────────────────────────────────────────────
+// ✅ Allows the MVC frontend to call this API from the browser
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowMVC", policy =>
+    {
+        policy.WithOrigins(
+                "https://localhost:7261",
+                "http://localhost:5296")
+              .AllowAnyHeader()
+              .AllowAnyMethod()
+              .AllowCredentials(); // required for SignalR
+    });
+});
+
+// ─── Swagger ──────────────────────────────────────────────────────────────────
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
+    c.SwaggerDoc("v1", new OpenApiInfo { Title = "MassMessaging API", Version = "v1" });
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
+        Description = "JWT Bearer token. Örnek: 'Bearer {token}'",
         Name = "Authorization",
         In = ParameterLocation.Header,
-        Type = SecuritySchemeType.Http,
-        Scheme = "bearer"
+        Type = SecuritySchemeType.ApiKey,
+        Scheme = "Bearer"
     });
     c.AddSecurityRequirement(new OpenApiSecurityRequirement
     {
-        { new OpenApiSecurityScheme { Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "Bearer" } }, Array.Empty<string>() }
+        {
+            new OpenApiSecurityScheme
+            {
+                Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "Bearer" }
+            },
+            Array.Empty<string>()
+        }
     });
-});
-
-// 5. CORS
-builder.Services.AddCors(options =>
-{
-    options.AddPolicy("AllowAll", b => b.AllowAnyMethod().AllowAnyHeader().AllowCredentials().SetIsOriginAllowed(origin => true));
 });
 
 var app = builder.Build();
 
-app.UseMiddleware<MassMessagingAPI.Middlewares.ExceptionMiddleware>();
+// ─── Seed Database ────────────────────────────────────────────────────────────
+// Creates Admin + User roles and the default admin@portal.com account on startup
+using (var scope = app.Services.CreateScope())
+{
+    await SeedData.InitializeAsync(scope.ServiceProvider);
+}
+
+// ─── Middleware Pipeline ──────────────────────────────────────────────────────
+app.UseMiddleware<ExceptionMiddleware>();
 
 if (app.Environment.IsDevelopment())
 {
@@ -99,19 +136,14 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 app.UseStaticFiles();
-app.UseCors("AllowAll");
+
+// ✅ CORS must come before Auth
+app.UseCors("AllowMVC");
+
 app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
-app.MapHub<MassMessagingAPI.Hubs.ChatHub>("/chathub");
-
-// Seed Data
-using (var scope = app.Services.CreateScope())
-{
-    var services = scope.ServiceProvider;
-    try { await MassMessagingAPI.Data.SeedData.InitializeAsync(services); }
-    catch (Exception ex) { var logger = services.GetRequiredService<ILogger<Program>>(); logger.LogError(ex, "SeedData hatas�."); }
-}
+app.MapHub<ChatHub>("/chatHub");
 
 app.Run();

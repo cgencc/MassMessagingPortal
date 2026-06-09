@@ -4,7 +4,7 @@
 
 <div class="row justify-content-center mt-5 pt-4">
     <div class="col-md-5 col-lg-4">
-        <div class="card modern-card">
+        <div class="card shadow-sm border-0 rounded-4">
             <div class="card-body p-5">
                 <div class="text-center mb-4">
                     <div class="bg-primary text-white rounded-circle d-inline-flex justify-content-center align-items-center mb-3" style="width: 60px; height: 60px;">
@@ -29,7 +29,10 @@
                 </form>
 
                 <div class="text-center mt-4 pt-2 border-top">
-                    <p class="mb-0 text-muted small">Hesabınız yok mu? <a href="/Auth/Register" class="text-primary fw-bold text-decoration-none">Hemen Kayıt Olun</a></p>
+                    <p class="mb-0 text-muted small">
+                        Hesabınız yok mu?
+                        <a href="/Auth/Register" class="text-primary fw-bold text-decoration-none">Hemen Kayıt Olun</a>
+                    </p>
                 </div>
             </div>
         </div>
@@ -38,18 +41,22 @@
 
 @section Scripts {
     <script>
+        // ✅ ARCHITECTURE: Pure JS — calls the API directly, stores JWT in localStorage.
         const API_URL = "https://localhost:7124/api/Auth/login";
 
         document.getElementById("loginForm").addEventListener("submit", async function (e) {
             e.preventDefault();
-            const email = document.getElementById("email").value;
-            const password = document.getElementById("password").value;
+            const errBox = document.getElementById("errorMessage");
+            errBox.style.display = "none";
 
             try {
                 const response = await fetch(API_URL, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ email: email, password: password })
+                    body: JSON.stringify({
+                        email: document.getElementById("email").value,
+                        password: document.getElementById("password").value
+                    })
                 });
 
                 if (response.ok) {
@@ -57,12 +64,15 @@
                     localStorage.setItem("JWToken", data.token);
                     window.location.href = "/Chat/Index";
                 } else {
-                    document.getElementById("errorMessage").innerText = "E-posta veya şifre hatalı!";
-                    document.getElementById("errorMessage").style.display = "block";
+                    errBox.innerText = "E-posta veya şifre hatalı!";
+                    errBox.style.display = "block";
                 }
             } catch (error) {
-                console.error("Hata:", error);
+                errBox.innerText = "Sunucuya bağlanılamadı. API çalışıyor mu?";
+                errBox.style.display = "block";
+                console.error("Login error:", error);
             }
         });
     </script>
 }
+    

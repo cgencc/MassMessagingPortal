@@ -2,17 +2,11 @@
 
 namespace MassMessaging.MVC.Controllers
 {
+    // ✅ ARCHITECTURE: This controller only serves views.
+    // All login/register logic is done by JS fetch() calls directly to the API.
     public class AuthController : Controller
     {
-        // Gördüğün gibi sıfır kod, sıfır API müdahalesi. Sadece sayfayı açar.
-        public IActionResult Login()
-        {
-            return View();
-        }
-
-        public IActionResult Register()
-        {
-            return View();
-        }
+        public IActionResult Login() => View();
+        public IActionResult Register() => View();
     }
 }
