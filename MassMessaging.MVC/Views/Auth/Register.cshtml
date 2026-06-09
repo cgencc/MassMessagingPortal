@@ -14,7 +14,7 @@
                     <p class="text-muted small">Sadece birkaç adımda aramıza katılın</p>
                 </div>
 
-                <div id="messageBox" class="alert" style="display:none; font-size: 0.9em;"></div>
+                <div id="messageBox" class="alert d-none" style="font-size: 0.9em;"></div>
 
                 <form id="registerForm">
                     <div class="row g-2 mb-3">
@@ -39,7 +39,7 @@
                         <input type="password" id="password" class="form-control" placeholder="Şifre" required minlength="6" />
                         <label>Şifre (En az 6 karakter)</label>
                     </div>
-                    <button type="submit" class="btn btn-success w-100 py-3 fw-bold rounded-3 shadow-sm">Kayıt Ol</button>
+                    <button type="submit" id="submitBtn" class="btn btn-success w-100 py-3 fw-bold rounded-3 shadow-sm">Kayıt Ol</button>
                 </form>
 
                 <div class="text-center mt-4 pt-2 border-top">
@@ -56,20 +56,29 @@
 
         document.getElementById("registerForm").addEventListener("submit", async function (e) {
             e.preventDefault();
-            const firstName = document.getElementById("firstName").value;
-            const lastName = document.getElementById("lastName").value;
-            const email = document.getElementById("email").value;
-            const password = document.getElementById("password").value;
+
+            const messageBox = document.getElementById("messageBox");
+            const submitBtn = document.getElementById("submitBtn");
+
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = "Kaydediliyor...";
+
+            const payload = {
+                firstName: document.getElementById("firstName").value.trim(),
+                lastName: document.getElementById("lastName").value.trim(),
+                email: document.getElementById("email").value.trim(),
+                password: document.getElementById("password").value
+            };
 
             try {
                 const response = await fetch(REGISTER_API_URL, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ firstName: firstName, lastName: lastName, email: email, password: password })
+                    body: JSON.stringify(payload)
                 });
 
-                const messageBox = document.getElementById("messageBox");
-                messageBox.style.display = "block";
+                const result = await response.json();
+                messageBox.classList.remove("d-none");
 
                 if (response.ok) {
                     messageBox.className = "alert alert-success";
@@ -77,10 +86,24 @@
                     setTimeout(() => { window.location.href = "/Auth/Login"; }, 2000);
                 } else {
                     messageBox.className = "alert alert-danger";
-                    messageBox.innerText = "Kayıt başarısız! E-posta kullanılıyor olabilir.";
+                    // Identity'den gelen hata listesini (array) birleştirip gösteriyoruz
+                    let errorMessage = "Kayıt başarısız: ";
+                    if (Array.isArray(result)) {
+                        errorMessage += result.map(err => err.description).join(", ");
+                    } else if (result.message) {
+                        errorMessage += result.message;
+                    } else {
+                        errorMessage += "Bilgilerinizi kontrol edin.";
+                    }
+                    messageBox.innerText = errorMessage;
                 }
             } catch (error) {
-                console.error("Hata:", error);
+                messageBox.classList.remove("d-none");
+                messageBox.className = "alert alert-danger";
+                messageBox.innerText = "Sunucuya bağlanılamadı. Lütfen API'nin çalıştığından emin olun.";
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = "Kayıt Ol";
             }
         });
     </script>

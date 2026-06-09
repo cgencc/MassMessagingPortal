@@ -37,13 +37,17 @@
                 <div class="card-body p-4">
                     <div class="tab-content">
 
-                        <!-- USERS TAB -->
                         <div class="tab-pane fade show active" id="users" role="tabpanel">
                             <div class="d-flex justify-content-between align-items-center mb-3 bg-light p-3 rounded">
                                 <h6 class="fw-bold mb-0">Kullanıcı Listesi</h6>
                                 <div class="input-group w-auto">
                                     <select id="bulkGroupSelect" class="form-select form-select-sm"></select>
-                                    <button class="btn btn-sm btn-success" onclick="bulkAddUsers()">Seçilenleri Gruba Ekle</button>
+                                    <button class="btn btn-sm btn-success" onclick="bulkAddUsers()">
+                                        <i class="fa-solid fa-plus me-1"></i> Gruba Ekle
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-danger" onclick="bulkRemoveUsers()">
+                                        <i class="fa-solid fa-minus me-1"></i> Gruptan Çıkar
+                                    </button>
                                 </div>
                             </div>
                             <div class="table-responsive">
@@ -68,7 +72,6 @@
                             </div>
                         </div>
 
-                        <!-- GROUPS TAB -->
                         <div class="tab-pane fade" id="groups" role="tabpanel">
                             <div class="row">
                                 <div class="col-md-5">
@@ -98,9 +101,7 @@
     <script>
         const API_BASE = "https://localhost:7124/api";
 
-        // ─── Auth Guard (JS-only, no server session) ──────────────────────────
-        // The MVC controller just serves this view. We check the token and role
-        // right here in JS — if the user is not an Admin, redirect to login.
+        // ─── Auth Guard ────────────────────────────────────────────────────────
         const token = localStorage.getItem("JWToken");
 
         (function guardAdminPage() {
@@ -110,15 +111,16 @@
             }
             try {
                 const payload = JSON.parse(atob(token.split('.')[1]));
-                // Check token expiry
+
                 if (payload.exp && Date.now() / 1000 > payload.exp) {
                     localStorage.removeItem("JWToken");
                     window.location.href = "/Auth/Login";
                     return;
                 }
-                // Check Admin role
+
                 const role = payload["http://schemas.microsoft.com/ws/2008/06/identity/claims/role"] || payload["role"];
                 const isAdmin = role === "Admin" || (Array.isArray(role) && role.includes("Admin"));
+
                 if (!isAdmin) {
                     alert("Bu sayfaya erişim yetkiniz yok.");
                     window.location.href = "/Chat/Index";
@@ -143,15 +145,57 @@
         async function bulkAddUsers() {
             const groupId = document.getElementById("bulkGroupSelect").value;
             const selected = Array.from(document.querySelectorAll(".user-checkbox:checked")).map(cb => cb.value);
-            if (!groupId) return alert("Lütfen bir grup seçin!");
-            if (selected.length === 0) return alert("Lütfen en az bir kullanıcı seçin!");
+
+            if (!groupId) {
+                return alert("Lütfen bir grup seçin!");
+            }
+            if (selected.length === 0) {
+                return alert("Lütfen en az bir kullanıcı seçin!");
+            }
 
             const res = await fetch(`${API_BASE}/Group/add-users-bulk`, {
                 method: "POST",
                 headers: jsonHeader(),
                 body: JSON.stringify({ groupId: parseInt(groupId), userIds: selected })
             });
-            alert(res.ok ? "Kullanıcılar başarıyla gruba eklendi." : "Hata oluştu.");
+
+            if (res.ok) {
+                alert("Kullanıcılar başarıyla gruba eklendi.");
+            } else {
+                alert("Gruba ekleme sırasında hata oluştu.");
+            }
+        }
+
+        // ─── Bulk Remove from Group ───────────────────────────────────────────
+        async function bulkRemoveUsers() {
+            const groupId = document.getElementById("bulkGroupSelect").value;
+            const selected = Array.from(document.querySelectorAll(".user-checkbox:checked")).map(cb => cb.value);
+
+            if (!groupId) {
+                return alert("Lütfen işlem yapılacak grubu seçin!");
+            }
+            if (selected.length === 0) {
+                return alert("Lütfen gruptan çıkarmak istediğiniz kullanıcıları seçin!");
+            }
+            if (!confirm("Seçili kullanıcıları bu gruptan çıkarmak istediğinize emin misiniz?")) {
+                return;
+            }
+
+            let successCount = 0;
+
+            // Seçili her kullanıcı için API'ye çıkarma isteği atıyoruz
+            for (let userId of selected) {
+                const res = await fetch(`${API_BASE}/Admin/remove-member/${groupId}/${userId}`, {
+                    method: "DELETE",
+                    headers: authHeader()
+                });
+
+                if (res.ok) {
+                    successCount++;
+                }
+            }
+
+            alert(`${successCount} kullanıcı gruptan başarıyla çıkarıldı.`);
         }
 
         // ─── Load Users ───────────────────────────────────────────────────────
@@ -165,6 +209,7 @@
             }
 
             const users = await res.json();
+
             document.getElementById("usersTableBody").innerHTML = users.map(u => {
                 const isAdmin = u.roles.includes("Admin");
                 return `
@@ -194,23 +239,36 @@
 
         // ─── Grant Admin ──────────────────────────────────────────────────────
         async function grantAdmin(id) {
-            if (!confirm("Bu kullanıcıyı Admin yapmak istediğinize emin misiniz?")) return;
+            if (!confirm("Bu kullanıcıyı Admin yapmak istediğinize emin misiniz?")) {
+                return;
+            }
+
             const res = await fetch(`${API_BASE}/Admin/assign-role/${id}/Admin`, {
-                method: "POST", headers: authHeader()
+                method: "POST",
+                headers: authHeader()
             });
-            if (res.ok) { loadUsers(); }
-            else { alert("Rol atama başarısız."); }
+
+            if (res.ok) {
+                loadUsers();
+            } else {
+                alert("Rol atama başarısız.");
+            }
         }
 
         // ─── Remove Admin ─────────────────────────────────────────────────────
-        // ✅ NEW: Calls POST /api/Admin/remove-role/{userId}/Admin
         async function removeAdmin(id) {
-            if (!confirm("Bu kullanıcının Admin yetkisini kaldırmak istediğinize emin misiniz?")) return;
+            if (!confirm("Bu kullanıcının Admin yetkisini kaldırmak istediğinize emin misiniz?")) {
+                return;
+            }
+
             const res = await fetch(`${API_BASE}/Admin/remove-role/${id}/Admin`, {
-                method: "POST", headers: authHeader()
+                method: "POST",
+                headers: authHeader()
             });
-            if (res.ok) { loadUsers(); }
-            else {
+
+            if (res.ok) {
+                loadUsers();
+            } else {
                 const err = await res.json().catch(() => ({}));
                 alert(err.message || "Yetki kaldırma başarısız.");
             }
@@ -218,25 +276,42 @@
 
         // ─── Delete User ──────────────────────────────────────────────────────
         async function deleteUser(id) {
-            if (!confirm("Bu kullanıcıyı kalıcı olarak silmek istediğinize emin misiniz?")) return;
+            if (!confirm("Bu kullanıcıyı kalıcı olarak silmek istediğinize emin misiniz?")) {
+                return;
+            }
+
             const res = await fetch(`${API_BASE}/Admin/delete-user/${id}`, {
-                method: "DELETE", headers: authHeader()
+                method: "DELETE",
+                headers: authHeader()
             });
-            if (res.ok) { loadUsers(); }
-            else { alert("Silme işlemi başarısız."); }
+
+            if (res.ok) {
+                loadUsers();
+            } else {
+                alert("Silme işlemi başarısız.");
+            }
         }
 
         // ─── Load Groups ──────────────────────────────────────────────────────
         async function loadGroups() {
             const res = await fetch(`${API_BASE}/Group/list`, { headers: authHeader() });
-            if (!res.ok) return;
+
+            if (!res.ok) {
+                return;
+            }
+
             const groups = await res.json();
 
             document.getElementById("groupListUI").innerHTML = groups.length
                 ? groups.map(g => `
                     <li class="list-group-item d-flex justify-content-between align-items-center">
                         ${g.name}
-                        <span class="badge bg-dark">ID: ${g.id}</span>
+                        <div>
+                            <span class="badge bg-dark me-2">ID: ${g.id}</span>
+                            <button class="btn btn-sm btn-outline-danger" onclick="deleteGroup(${g.id})" title="Grubu Sil">
+                                <i class="fa-solid fa-trash"></i>
+                            </button>
+                        </div>
                     </li>`).join('')
                 : '<li class="list-group-item text-muted">Henüz grup yok.</li>';
 
@@ -248,17 +323,40 @@
         // ─── Create Group ─────────────────────────────────────────────────────
         async function createGroup() {
             const name = document.getElementById("newGroupName").value.trim();
-            if (!name) return alert("Lütfen bir grup adı girin.");
+
+            if (!name) {
+                return alert("Lütfen bir grup adı girin.");
+            }
+
             const res = await fetch(`${API_BASE}/Group/create`, {
                 method: "POST",
                 headers: jsonHeader(),
                 body: JSON.stringify({ name })
             });
+
             if (res.ok) {
                 document.getElementById("newGroupName").value = "";
                 loadGroups();
             } else {
                 alert("Grup oluşturulamadı.");
+            }
+        }
+
+        // ─── Delete Group ─────────────────────────────────────────────────────
+        async function deleteGroup(id) {
+            if (!confirm("Bu grubu kalıcı olarak silmek istediğinize emin misiniz?")) {
+                return;
+            }
+
+            const res = await fetch(`${API_BASE}/Admin/delete-group/${id}`, {
+                method: "DELETE",
+                headers: authHeader()
+            });
+
+            if (res.ok) {
+                loadGroups();
+            } else {
+                alert("Silme işlemi başarısız.");
             }
         }
 

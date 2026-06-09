@@ -45,8 +45,21 @@ namespace MassMessagingAPI.Controllers
         [HttpGet("list")]
         public async Task<IActionResult> GetGroups()
         {
-            var groups = await _groupRepository.GetAllAsync();
-            return Ok(groups.Select(g => new { g.Id, g.Name }));
+            // Giriş yapan kullanıcının ID'sini alıyoruz
+            var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            if (userId == null) return Unauthorized();
+
+            // ÇOK KRİTİK FİLTRE: Sadece bu kullanıcının UserGroups tablosunda eşleştiği grupları getiriyoruz
+            var userGroups = await _context.UserGroups
+                .Where(ug => ug.UserId == userId)
+                .Select(ug => new
+                {
+                    Id = ug.Group.Id,
+                    Name = ug.Group.Name
+                })
+                .ToListAsync();
+
+            return Ok(userGroups);
         }
 
         [HttpPost("add-user")]

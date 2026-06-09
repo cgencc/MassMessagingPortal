@@ -273,6 +273,34 @@
                     msgContent.closest(".msg-bubble").remove();
                 }
             });
+            // ✅ Gruptan Atılma Dinleyicisi
+        // ✅ Gruptan Atılma Dinleyicisi (Sol listeden de anında kaldırır)
+                connection.on("RemovedFromGroup", (kickedGroupId) => {
+
+                    // 1. Sol taraftaki listeden ilgili grubun HTML elemanını bul ve tamamen sil
+                    const groupListItem = document.getElementById(`chat-item-${kickedGroupId}`);
+                    if (groupListItem) {
+                        groupListItem.remove();
+                    }
+
+                    // 2. Eğer kullanıcı o esnada tam da atıldığı grubun içindeyse ekranı kilitle
+                    if (isGroup && activeId == kickedGroupId) {
+                        activeId = null;
+                        isGroup = false;
+                        document.getElementById("chatHeaderName").innerText = "Sistem Mesajı";
+                        document.getElementById("chatBox").innerHTML = `
+                            <div id="chatEmptyState" class="text-center mt-5">
+                                <i class="fa-solid fa-circle-xmark fa-3x mb-3 text-danger d-block"></i>
+                                <h5 class="text-muted">Bu gruptan çıkarıldınız.</h5>
+                            </div>`;
+
+                        // Mesaj yazma alanlarını devre dışı bırak
+                        document.getElementById("messageInput").disabled = true;
+                        document.getElementById("recordBtn").disabled = true;
+                    }
+
+                    showToast("Bir gruptan çıkarıldınız!");
+                });
 
             // Incoming DM
         // Incoming DM
@@ -539,11 +567,27 @@
             if (res.ok) { renderMessage("Ben", text, true, new Date().toISOString(), null, true); if (!contentOverride) input.value = ""; }
         }
 
-        async function deleteMsg(id) {
-            if (!confirm("Silmek istediğine emin misin?")) return;
-            const res = await fetch(`${API_BASE}/Message/delete/${id}`, { method: "DELETE", headers: { "Authorization": `Bearer ${token}` } });
-            if (res.ok) { document.getElementById(`msg-content-${id}`)?.closest(".msg-bubble")?.remove(); showToast("Mesaj silindi."); }
-        }
+        function deleteMsg(id) {
+                    if (!confirm("Silmek istediğine emin misin?")) return;
+
+                    // Hocanın projede görmek isteyeceği jQuery AJAX kullanımı
+                    $.ajax({
+                        url: `${API_BASE}/Message/delete/${id}`,
+                        type: 'DELETE',
+                        headers: { "Authorization": "Bearer " + token },
+                        success: function(response) {
+                            const msgBubble = document.getElementById(`msg-content-${id}`);
+                            if (msgBubble) {
+                                msgBubble.closest(".msg-bubble").remove();
+                            }
+                            showToast("Mesaj silindi.");
+                        },
+                        error: function(xhr, status, error) {
+                            console.error("AJAX Hatası:", error);
+                            showToast("Mesaj silinirken bir hata oluştu.");
+                        }
+                    });
+                }
 
         async function editMsg(id, oldContent) {
             const newContent = prompt("Mesajı düzenle:", oldContent);

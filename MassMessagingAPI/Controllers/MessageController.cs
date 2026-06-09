@@ -40,6 +40,18 @@ namespace MassMessagingAPI.Controllers
             var senderName = User.FindFirst("FirstName")?.Value;
             if (senderId == null) return Unauthorized("Kullanıcı bulunamadı.");
 
+            // ✅ YENİ EKLENEN: Gruptan çıkarılan birinin mesaj atmasını engelleyen güvenlik kalkanı
+            if (model.GroupId.HasValue)
+            {
+                var isMember = await _context.UserGroups
+                    .AnyAsync(ug => ug.GroupId == model.GroupId.Value && ug.UserId == senderId);
+
+                if (!isMember)
+                {
+                    return Unauthorized(new { Message = "Bu gruba mesaj gönderme yetkiniz yok. Gruptan çıkarılmış olabilirsiniz." });
+                }
+            }
+
             var message = new Message
             {
                 Content = model.Content,
@@ -220,6 +232,7 @@ namespace MassMessagingAPI.Controllers
 
             return Ok(new { UnreadCount = count });
         }
+
         [HttpPost("upload-file")]
         public async Task<IActionResult> UploadFile(IFormFile file)
         {
@@ -241,6 +254,7 @@ namespace MassMessagingAPI.Controllers
 
             return Ok(new { url = "/uploads/" + fileName });
         }
+
         [HttpPut("mark-conversation-read/{id}")]
         public async Task<IActionResult> MarkConversationRead(string id, [FromQuery] bool isGroup)
         {

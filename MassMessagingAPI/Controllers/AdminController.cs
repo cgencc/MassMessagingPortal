@@ -7,6 +7,8 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
+using MassMessagingAPI.Hubs; // ChatHub'ın olduğu namespace
+using Microsoft.AspNetCore.SignalR;
 
 namespace MassMessagingAPI.Controllers
 {
@@ -19,6 +21,7 @@ namespace MassMessagingAPI.Controllers
         private readonly RoleManager<IdentityRole> _roleManager;
         private readonly AppDbContext _context;
         private readonly IHubContext<ChatHub> _hubContext;
+
 
         public AdminController(
             UserManager<AppUser> userManager,
@@ -74,6 +77,33 @@ namespace MassMessagingAPI.Controllers
             if (!result.Succeeded) return BadRequest(result.Errors);
             return Ok(new { Message = "Rol başarıyla kaldırıldı." });
         }
+        [Authorize(Roles = "Admin")]
+        [HttpDelete("delete-group/{groupId}")]
+        public async Task<IActionResult> DeleteGroup(int groupId)
+        {
+            var group = await _context.Groups.FindAsync(groupId);
+            if (group == null) return NotFound();
+
+            _context.Groups.Remove(group);
+            await _context.SaveChangesAsync();
+            return Ok(new { Message = "Grup başarıyla silindi." });
+        }
+
+        [Authorize(Roles = "Admin")]
+        [HttpDelete("remove-member/{groupId}/{userId}")]
+        public async Task<IActionResult> RemoveMember(int groupId, string userId)
+        {
+            var userGroup = await _context.UserGroups.FirstOrDefaultAsync(ug => ug.GroupId == groupId && ug.UserId == userId);
+            if (userGroup == null) return NotFound("Üye bulunamadı.");
+
+            _context.UserGroups.Remove(userGroup);
+            await _context.SaveChangesAsync();
+
+            // YENİ EKLENEN: Kullanıcıya gruptan atıldığını canlı olarak bildir!
+            await _hubContext.Clients.User(userId).SendAsync("RemovedFromGroup", groupId);
+
+            return Ok(new { Message = "Üye gruptan çıkarıldı." });
+        }
 
         [HttpDelete("delete-user/{id}")]
         public async Task<IActionResult> DeleteUser(string id)
@@ -102,8 +132,10 @@ namespace MassMessagingAPI.Controllers
         }
     }
 
+
     public class BroadcastDto
     {
         public string Message { get; set; } = string.Empty;
     }
+
 }
