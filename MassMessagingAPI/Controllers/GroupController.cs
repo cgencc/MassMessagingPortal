@@ -42,20 +42,34 @@ namespace MassMessagingAPI.Controllers
             return Ok(new { Message = $"{dto.Name} grubu başarıyla oluşturuldu.", GroupId = group.Id });
         }
 
+        // ─── ADMİN PANELİ İÇİN (SİSTEMDEKİ HER GRUBU GETİRİR) ───
         [HttpGet("list")]
         public async Task<IActionResult> GetGroups()
         {
-            // Giriş yapan kullanıcının ID'sini alıyoruz
+            var groups = await _context.Groups
+                .Select(g => new
+                {
+                    id = g.Id,
+                    name = g.Name
+                })
+                .ToListAsync();
+
+            return Ok(groups);
+        }
+
+        // ─── SOHBET (USER) EKRANI İÇİN (SADECE ÜYE OLUNAN GRUPLARI GETİRİR) ───
+        [HttpGet("my-groups")]
+        public async Task<IActionResult> GetMyGroups()
+        {
             var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
             if (userId == null) return Unauthorized();
 
-            // ÇOK KRİTİK FİLTRE: Sadece bu kullanıcının UserGroups tablosunda eşleştiği grupları getiriyoruz
             var userGroups = await _context.UserGroups
                 .Where(ug => ug.UserId == userId)
                 .Select(ug => new
                 {
-                    Id = ug.Group.Id,
-                    Name = ug.Group.Name
+                    id = ug.Group.Id,
+                    name = ug.Group.Name
                 })
                 .ToListAsync();
 
@@ -95,7 +109,6 @@ namespace MassMessagingAPI.Controllers
             return Ok(new { Message = $"{addedCount} kullanıcı gruba eklendi." });
         }
 
-        // ✅ NEW: Remove a single user from a group
         [HttpDelete("remove-user/{groupId}/{userId}")]
         [Authorize(Roles = "Admin")]
         public async Task<IActionResult> RemoveUserFromGroup(int groupId, string userId)
@@ -105,8 +118,6 @@ namespace MassMessagingAPI.Controllers
             if (membership == null)
                 return NotFound(new { Message = "Bu kullanıcı bu grubun üyesi değil." });
 
-            // GenericRepository.DeleteAsync uses int id — UserGroup has composite key,
-            // so we go directly through EF context instead.
             var entry = _context.UserGroups.FirstOrDefault(ug => ug.UserId == userId && ug.GroupId == groupId);
             if (entry != null)
             {
@@ -116,7 +127,6 @@ namespace MassMessagingAPI.Controllers
             return Ok(new { Message = "Kullanıcı gruptan çıkarıldı." });
         }
 
-        // ✅ NEW: Remove multiple users from a group at once
         [HttpDelete("remove-users-bulk")]
         [Authorize(Roles = "Admin")]
         public async Task<IActionResult> RemoveUsersFromGroup([FromBody] BulkUserGroupDto dto)

@@ -294,7 +294,9 @@
 
         // ─── Load Groups ──────────────────────────────────────────────────────
         async function loadGroups() {
-            const res = await fetch(`${API_BASE}/Group/list`, { headers: authHeader() });
+                const res = await fetch(`${API_BASE}/Group/my-groups`, {
+            headers: authHeader()
+        });
 
             if (!res.ok) {
                 return;
